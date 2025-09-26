@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"hosts-manager/internal/audit"
 	"hosts-manager/internal/backup"
 	"hosts-manager/internal/config"
 	"hosts-manager/internal/hosts"
@@ -102,7 +103,9 @@ func addCmd() *cobra.Command {
 				Enabled:   true,
 			}
 
-			hostsFile.AddEntry(entry)
+			if err := hostsFile.AddEntry(entry); err != nil {
+				return fmt.Errorf("failed to add entry: %w", err)
+			}
 
 			if dryRun {
 				fmt.Printf("Would add: %s %s", entry.IP, entry.Hostnames)
@@ -114,7 +117,16 @@ func addCmd() *cobra.Command {
 			}
 
 			if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
+				// Log failed operation
+				if logger, logErr := audit.NewLogger(); logErr == nil {
+					logger.LogHostsOperation("add", entry.IP, entry.Hostnames, false, err.Error())
+				}
 				return fmt.Errorf("failed to write hosts file: %w", err)
+			}
+
+			// Log successful operation
+			if logger, err := audit.NewLogger(); err == nil {
+				logger.LogHostsOperation("add", entry.IP, entry.Hostnames, true, "")
 			}
 
 			fmt.Printf("Added entry: %s -> %v\n", entry.IP, entry.Hostnames)

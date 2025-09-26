@@ -42,7 +42,7 @@ func (m *Manager) CreateBackup() (string, error) {
 	}
 
 	backupDir := m.config.Backup.Directory
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -71,7 +71,7 @@ func (m *Manager) copyFile(src, dst string, compress bool) error {
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,13 @@ func (m *Manager) restoreFile(src, dst string, decompress bool) error {
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.Create(dst)
+	// Get the original destination file permissions to preserve them
+	var fileMode os.FileMode = 0644 // Default fallback
+	if dstInfo, err := os.Stat(dst); err == nil {
+		fileMode = dstInfo.Mode()
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
 	if err != nil {
 		return err
 	}
@@ -257,8 +263,8 @@ func (m *Manager) cleanupOldBackups() error {
 	}
 
 	for _, filePath := range toDelete {
-		if err := os.Remove(filePath); err != nil {
-			fmt.Printf("Warning: failed to remove old backup %s: %v\n", filePath, err)
+		if err := m.secureDelete(filePath); err != nil {
+			fmt.Printf("Warning: failed to securely remove old backup %s: %v\n", filePath, err)
 		}
 	}
 
@@ -278,5 +284,102 @@ func (m *Manager) DeleteBackup(filePath string) error {
 		return fmt.Errorf("backup file does not exist: %s", filePath)
 	}
 
-	return os.Remove(filePath)
+	return m.secureDelete(filePath)
+}
+
+// secureDelete overwrites file content before deletion for security
+func (m *Manager) secureDelete(filePath string) error {
+	// Get file info first
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // Already deleted
+		}
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	fileSize := fileInfo.Size()
+
+	// Open file for writing
+	file, err := os.OpenFile(filePath, os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("failed to open file for secure deletion: %w", err)
+	}
+	defer file.Close()
+
+	// Overwrite with zeros (single pass is sufficient for most cases)
+	zeroBuffer := make([]byte, min(4096, int(fileSize))) // 4KB chunks
+	for i := int64(0); i < fileSize; i += int64(len(zeroBuffer)) {
+		remaining := fileSize - i
+		if remaining < int64(len(zeroBuffer)) {
+			zeroBuffer = zeroBuffer[:remaining]
+		}
+
+		if _, err := file.WriteAt(zeroBuffer, i); err != nil {
+			return fmt.Errorf("failed to overwrite file content: %w", err)
+		}
+	}
+
+	// Sync to ensure data is written to disk
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("failed to sync overwritten data: %w", err)
+	}
+
+	// Close before removing
+	file.Close()
+
+	// Now remove the file
+	if err := os.Remove(filePath); err != nil {
+		return fmt.Errorf("failed to remove file after overwriting: %w", err)
+	}
+
+	return nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// VerifyBackupIntegrity verifies the integrity of a backup file
+func (m *Manager) VerifyBackupIntegrity(filePath string) error {
+	// Get expected hash from our records
+	backupInfo, err := m.getBackupInfo(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to get backup info: %w", err)
+	}
+
+	// Calculate current hash
+	currentHash, err := m.calculateFileHash(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to calculate current hash: %w", err)
+	}
+
+	// Compare hashes
+	if currentHash != backupInfo.Hash {
+		return fmt.Errorf("backup integrity check failed: hash mismatch for %s", filePath)
+	}
+
+	return nil
+}
+
+// CreateSecureBackup creates a backup with enhanced security features
+func (m *Manager) CreateSecureBackup() (string, error) {
+	// First create the backup normally
+	backupPath, err := m.CreateBackup()
+	if err != nil {
+		return "", err
+	}
+
+	// Verify the backup integrity immediately after creation
+	if err := m.VerifyBackupIntegrity(backupPath); err != nil {
+		// If verification fails, securely delete the bad backup
+		m.secureDelete(backupPath)
+		return "", fmt.Errorf("backup verification failed: %w", err)
+	}
+
+	return backupPath, nil
 }
