@@ -3,7 +3,7 @@ package hosts
 import (
 	"bufio"
 	"fmt"
-	"net"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -173,18 +173,13 @@ func (p *Parser) parseEntry(line string, lineNum int) (Entry, bool) {
 }
 
 func (p *Parser) isValidIP(ip string) bool {
-	return net.ParseIP(ip) != nil
+	return ValidateIP(ip) == nil
 }
 
 func (hf *HostsFile) Write(filePath string) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create hosts file: %w", err)
-	}
-	defer file.Close()
-
-	writer := bufio.NewWriter(file)
-	defer writer.Flush()
+	return AtomicWrite(filePath, func(file io.Writer) error {
+		writer := bufio.NewWriter(file)
+		defer writer.Flush()
 
 	// Write managed file header
 	managedHeader := []string{
@@ -287,8 +282,9 @@ func (hf *HostsFile) Write(filePath string) error {
 		}
 	}
 
-	hf.Modified = time.Now()
-	return nil
+		hf.Modified = time.Now()
+		return nil
+	})
 }
 
 func formatEntry(entry Entry) string {
@@ -305,7 +301,12 @@ func formatEntry(entry Entry) string {
 	return line
 }
 
-func (hf *HostsFile) AddEntry(entry Entry) {
+func (hf *HostsFile) AddEntry(entry Entry) error {
+	// Validate the entry before adding
+	if err := ValidateEntry(entry); err != nil {
+		return fmt.Errorf("entry validation failed: %w", err)
+	}
+
 	categoryName := entry.Category
 	if categoryName == "" {
 		categoryName = CategoryDefault
@@ -315,7 +316,7 @@ func (hf *HostsFile) AddEntry(entry Entry) {
 	for i := range hf.Categories {
 		if hf.Categories[i].Name == categoryName {
 			hf.Categories[i].Entries = append(hf.Categories[i].Entries, entry)
-			return
+			return nil
 		}
 	}
 
@@ -324,6 +325,8 @@ func (hf *HostsFile) AddEntry(entry Entry) {
 		Enabled: true,
 		Entries: []Entry{entry},
 	})
+
+	return nil
 }
 
 func (hf *HostsFile) RemoveEntry(hostname string) bool {

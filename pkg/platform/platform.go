@@ -53,14 +53,41 @@ func (p *Platform) ElevateIfNeeded() error {
 		return nil
 	}
 
+	// Check if already elevated but still no write permission (other issue)
+	if p.IsElevated() {
+		return fmt.Errorf("elevated privileges detected but still cannot write to hosts file at %s - check file permissions or disk space", p.HostsDir)
+	}
+
 	switch runtime.GOOS {
 	case "windows":
-		return fmt.Errorf("please run as Administrator")
+		return fmt.Errorf("Administrator privileges required to modify hosts file. Please run this command in an elevated Command Prompt or PowerShell")
 	case "darwin", "linux":
-		return fmt.Errorf("please run with sudo")
+		return fmt.Errorf("root privileges required to modify hosts file. Please run: sudo %s", strings.Join(os.Args, " "))
 	default:
-		return fmt.Errorf("insufficient permissions to modify hosts file")
+		return fmt.Errorf("insufficient permissions to modify hosts file at %s", p.HostsDir)
 	}
+}
+
+// ElevateIfNeededStrict performs stricter privilege checking for security-sensitive operations
+func (p *Platform) ElevateIfNeededStrict() error {
+	// For security-sensitive operations, we should always check for proper elevation
+	// even if the file happens to be writable by regular users
+	if !p.IsElevated() {
+		switch runtime.GOOS {
+		case "windows":
+			return fmt.Errorf("Administrator privileges required for this security-sensitive operation. Please run this command in an elevated Command Prompt or PowerShell")
+		case "darwin", "linux":
+			return fmt.Errorf("root privileges required for this security-sensitive operation. Please run: sudo %s", strings.Join(os.Args, " "))
+		default:
+			return fmt.Errorf("elevated privileges required for this security-sensitive operation")
+		}
+	}
+
+	if !p.HasWritePermission() {
+		return fmt.Errorf("cannot write to hosts file at %s - check file permissions or disk space", p.HostsDir)
+	}
+
+	return nil
 }
 
 func (p *Platform) CreateBackupPath(timestamp string) string {

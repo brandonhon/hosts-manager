@@ -318,7 +318,10 @@ func (m *model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 
 			// Add to hosts file
-			m.hostsFile.AddEntry(entry)
+			if err := m.hostsFile.AddEntry(entry); err != nil {
+				m.message = fmt.Sprintf("Error adding entry: %v", err)
+				return m, nil
+			}
 			m.entries = buildEntryList(m.hostsFile)
 			m.message = fmt.Sprintf("Added entry: %s -> %v", entry.IP, entry.Hostnames)
 			m.currentView = viewMain
