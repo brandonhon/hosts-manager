@@ -77,9 +77,12 @@ func restoreCmd() *cobra.Command {
 				return err
 			}
 
-			backupPath := args[0]
-			if !filepath.IsAbs(backupPath) {
-				backupPath = filepath.Join(cfg.Backup.Directory, backupPath)
+			userPath := args[0]
+
+			// Validate and secure the backup path
+			backupPath, err := validateFilePath(userPath, cfg.Backup.Directory)
+			if err != nil {
+				return fmt.Errorf("invalid backup path: %w", err)
 			}
 
 			return backupMgr.RestoreBackup(backupPath)
@@ -134,6 +137,11 @@ func configCmd() *cobra.Command {
 
 				if editor == "" {
 					editor = "nano"
+				}
+
+				// Validate editor command for security
+				if !isValidEditor(editor) {
+					return fmt.Errorf("editor '%s' is not allowed for security reasons. Allowed editors: nano, vim, vi, emacs, code, notepad", editor)
 				}
 
 				return runCommand(editor, configPath)
@@ -195,10 +203,16 @@ func exportCmd() *cobra.Command {
 			if output == "" {
 				fmt.Print(string(data))
 			} else {
-				if err := os.WriteFile(output, data, 0644); err != nil {
+				// Validate output path for security
+				outputPath, err := validateFilePath(output, "")
+				if err != nil {
+					return fmt.Errorf("invalid output path: %w", err)
+				}
+
+				if err := os.WriteFile(outputPath, data, 0600); err != nil {
 					return err
 				}
-				fmt.Printf("Exported to: %s\n", output)
+				fmt.Printf("Exported to: %s\n", outputPath)
 			}
 
 			return nil
@@ -226,7 +240,14 @@ func importCmd() *cobra.Command {
 				return err
 			}
 
-			filePath := args[0]
+			userPath := args[0]
+
+			// Validate import file path for security
+			filePath, err := validateFilePath(userPath, "")
+			if err != nil {
+				return fmt.Errorf("invalid import file path: %w", err)
+			}
+
 			data, err := os.ReadFile(filePath)
 			if err != nil {
 				return fmt.Errorf("failed to read import file: %w", err)
@@ -255,7 +276,9 @@ func importCmd() *cobra.Command {
 
 				for _, category := range importedHosts.Categories {
 					for _, entry := range category.Entries {
-						currentHosts.AddEntry(entry)
+						if err := currentHosts.AddEntry(entry); err != nil {
+							return fmt.Errorf("failed to add imported entry %s: %w", entry.IP, err)
+						}
 					}
 				}
 				importedHosts = currentHosts
@@ -574,6 +597,94 @@ func formatSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// validateFilePath validates that a file path is safe and prevents path traversal attacks
+func validateFilePath(filePath string, allowedDir string) (string, error) {
+	// Clean the path to resolve any ".." or similar elements
+	cleanPath := filepath.Clean(filePath)
+
+	// Convert to absolute path if relative
+	var absPath string
+	if filepath.IsAbs(cleanPath) {
+		absPath = cleanPath
+	} else {
+		if allowedDir == "" {
+			return "", fmt.Errorf("relative paths not allowed when no base directory is specified")
+		}
+		absPath = filepath.Join(allowedDir, cleanPath)
+	}
+
+	// Clean again after joining
+	absPath = filepath.Clean(absPath)
+
+	// If an allowed directory is specified, ensure the path is within it
+	if allowedDir != "" {
+		allowedDirAbs, err := filepath.Abs(allowedDir)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve allowed directory: %w", err)
+		}
+
+		// Ensure the file path is within the allowed directory
+		relPath, err := filepath.Rel(allowedDirAbs, absPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to compute relative path: %w", err)
+		}
+
+		// Check if the relative path tries to escape the allowed directory
+		if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
+			return "", fmt.Errorf("path traversal attempt detected: %s", filePath)
+		}
+	}
+
+	// Additional security checks
+	if strings.Contains(absPath, "\x00") {
+		return "", fmt.Errorf("null byte in path")
+	}
+
+	return absPath, nil
+}
+
+// isValidEditor validates that the editor command is safe to execute
+func isValidEditor(editor string) bool {
+	// Whitelist of allowed editors - only the base command name, no arguments
+	allowedEditors := map[string]bool{
+		"nano":     true,
+		"vim":      true,
+		"vi":       true,
+		"emacs":    true,
+		"code":     true,
+		"notepad":  true,
+		"notepad++": true,
+		"sublime_text": true,
+		"atom":     true,
+		"gedit":    true,
+		"kate":     true,
+	}
+
+	// Extract just the command name (no paths, no arguments)
+	editorCmd := strings.TrimSpace(editor)
+
+	// Reject if contains suspicious characters
+	if strings.Contains(editorCmd, ";") ||
+	   strings.Contains(editorCmd, "&") ||
+	   strings.Contains(editorCmd, "|") ||
+	   strings.Contains(editorCmd, "`") ||
+	   strings.Contains(editorCmd, "$") ||
+	   strings.Contains(editorCmd, "&&") ||
+	   strings.Contains(editorCmd, "||") {
+		return false
+	}
+
+	// Extract just the base command (handle full paths)
+	baseName := filepath.Base(editorCmd)
+
+	// Remove .exe extension on Windows
+	if strings.HasSuffix(baseName, ".exe") {
+		baseName = strings.TrimSuffix(baseName, ".exe")
+	}
+
+	return allowedEditors[baseName]
 }
 
 func runCommand(name string, args ...string) error {

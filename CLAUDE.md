@@ -348,3 +348,66 @@ Potential areas for improvement:
 - Integration with cloud DNS services
 - Automatic host discovery
 - Performance optimizations for large files
+
+<!--
+Create a cross-platform cli hosts file manager in Go.
+  - Following Go best practices
+  - Create Makefile
+  - Create documentation
+
+  Core Features:
+  - Template system
+      - Keep categories (development, staging, production, custom) clearly separated.
+      - Allow users to define their own categories in a config file.
+  CRUD operations on entries
+      - add → add hostname/IP mapping
+      - delete → remove a mapping
+      - enable/disable → comment/uncomment lines
+      - enable/disable entire categories
+      - search → fuzzy search hostnames or IPs
+      - comment → attach inline or block comments
+  Interactive TUI mode (like fzf)
+      - Navigate entries, toggle on/off, edit inline.
+  Backup & restore
+      - Always back up the hosts file before modifying.
+      - Provide a --restore command.
+      - ISO 8601 date and time for extension.
+  Cross-platform abstraction
+      - Linux/macOS: /etc/hosts
+      - Windows: C:\Windows\System32\drivers\etc\hosts
+      - Handle permission elevation (sudo / run as admin).
+
+  Useful Extra Features:
+  - Configurable defaults
+      - YAML/JSON config to define template structure, category order, and defaults.
+  - Export/import
+      - Share hosts file templates with teammates (--export file.yaml, --import file.yaml).
+  - Profiles
+      - Ability to switch entire sets of entries (e.g., --profile dev, --profile vpn, --profile
+  minimal).
+  - Audit/verify
+      - Validate if entries resolve as expected (ping, dig, or Go’s net.LookupHost).
+      - Warn on duplicate entries or conflicting IP/hostname mappings.
+  - History / Versioning
+      - Keep a .hosts-history file with diffs.
+      - Allow rollback to previous versions.
+  - Dry run mode
+      - Show what changes would be applied without writing.
+  - Colorized diff
+      - Highlight added/removed/modified lines when applying changes.
+
+  Fringe Cases / Edge Features:
+  - Multiple hostnames on a single IP (must preserve formatting).
+  - Preserve comments & spacing when rewriting so users don’t lose manual edits.
+  - System conflicts
+      - On Windows, security software sometimes protects hosts.
+      - On Linux/macOS, make sure changes survive system updates.
+  - Lock file
+      - Prevent concurrent edits from multiple processes.
+  - Remote sync
+      - Optionally fetch/sync a hosts template from a URL or Git repo.
+  - Integration with VPNs / Docker / WSL
+      - Handle cases where /etc/hosts is modified by other processes.
+  - Interactive REPL mode (like hosts>) for quick modifications.
+  - Autocomplete in CLI (cobra or urfave/cli/v2 with completions).
+-->
