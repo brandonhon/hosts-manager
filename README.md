@@ -188,8 +188,9 @@ hosts-manager tui
 **TUI Controls:**
 - `↑/↓` or `k/j` - Navigate entries
 - `space` - Toggle entry enabled/disabled
+- `a` - Add new entry
 - `d` - Delete entry
-- `s` - Save changes
+- `s` - Save changes (shows confirmation)
 - `/` - Search mode
 - `r` - Refresh
 - `?` - Help

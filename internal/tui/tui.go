@@ -24,6 +24,12 @@ type model struct {
 	categories   []string
 	width        int
 	height       int
+	// Add entry fields
+	addIP        string
+	addHostnames string
+	addComment   string
+	addCategory  string
+	addField     int // 0=IP, 1=hostnames, 2=comment, 3=category
 }
 
 type view int
@@ -32,6 +38,7 @@ const (
 	viewMain view = iota
 	viewSearch
 	viewHelp
+	viewAdd
 )
 
 type entryWithIndex struct {
@@ -138,7 +145,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSearch(msg)
 		case viewHelp:
 			return m.updateHelp(msg)
+		case viewAdd:
+			return m.updateAdd(msg)
 		}
+
+	case errorMsg:
+		m.message = fmt.Sprintf("Error: %v", msg.err)
+		return m, nil
+
+	case successMsg:
+		m.message = "File saved successfully!"
+		return m, nil
 	}
 
 	return m, nil
@@ -165,16 +182,20 @@ func (m *model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "G":
 		m.cursor = len(m.entries) - 1
 
-	case "space":
+	case " ":
 		if m.cursor < len(m.entries) {
 			entry := &m.entries[m.cursor]
 			entry.entry.Enabled = !entry.entry.Enabled
 
+			// Update the corresponding entry in the hosts file
 			hostsCategory := m.hostsFile.GetCategory(entry.category)
 			if hostsCategory != nil {
 				for i := range hostsCategory.Entries {
+					// Match by IP and first hostname for more reliable identification
 					if hostsCategory.Entries[i].IP == entry.entry.IP &&
-						strings.Join(hostsCategory.Entries[i].Hostnames, " ") == strings.Join(entry.entry.Hostnames, " ") {
+						len(hostsCategory.Entries[i].Hostnames) > 0 &&
+						len(entry.entry.Hostnames) > 0 &&
+						hostsCategory.Entries[i].Hostnames[0] == entry.entry.Hostnames[0] {
 						hostsCategory.Entries[i].Enabled = entry.entry.Enabled
 						break
 					}
@@ -215,6 +236,14 @@ func (m *model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "s":
 		return m, m.saveFile()
+
+	case "a":
+		m.currentView = viewAdd
+		m.addIP = ""
+		m.addHostnames = ""
+		m.addComment = ""
+		m.addCategory = m.config.General.DefaultCategory
+		m.addField = 0
 
 	case "?", "h":
 		m.currentView = viewHelp
@@ -260,6 +289,76 @@ func (m *model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc", "?", "h":
 		m.currentView = viewMain
+	}
+
+	return m, nil
+}
+
+func (m *model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.currentView = viewMain
+
+	case "tab", "down":
+		m.addField = (m.addField + 1) % 4
+
+	case "shift+tab", "up":
+		m.addField = (m.addField + 3) % 4
+
+	case "enter":
+		if m.addIP != "" && m.addHostnames != "" {
+			// Create new entry
+			hostnames := strings.Fields(m.addHostnames)
+			entry := hosts.Entry{
+				IP:        m.addIP,
+				Hostnames: hostnames,
+				Comment:   m.addComment,
+				Category:  m.addCategory,
+				Enabled:   true,
+			}
+
+			// Add to hosts file
+			m.hostsFile.AddEntry(entry)
+			m.entries = buildEntryList(m.hostsFile)
+			m.message = fmt.Sprintf("Added entry: %s -> %v", entry.IP, entry.Hostnames)
+			m.currentView = viewMain
+		} else {
+			m.message = "IP and hostnames are required"
+		}
+
+	case "backspace":
+		switch m.addField {
+		case 0:
+			if len(m.addIP) > 0 {
+				m.addIP = m.addIP[:len(m.addIP)-1]
+			}
+		case 1:
+			if len(m.addHostnames) > 0 {
+				m.addHostnames = m.addHostnames[:len(m.addHostnames)-1]
+			}
+		case 2:
+			if len(m.addComment) > 0 {
+				m.addComment = m.addComment[:len(m.addComment)-1]
+			}
+		case 3:
+			if len(m.addCategory) > 0 {
+				m.addCategory = m.addCategory[:len(m.addCategory)-1]
+			}
+		}
+
+	default:
+		if len(msg.String()) == 1 {
+			switch m.addField {
+			case 0:
+				m.addIP += msg.String()
+			case 1:
+				m.addHostnames += msg.String()
+			case 2:
+				m.addComment += msg.String()
+			case 3:
+				m.addCategory += msg.String()
+			}
+		}
 	}
 
 	return m, nil
@@ -326,6 +425,8 @@ func (m *model) View() string {
 		return m.viewSearch()
 	case viewHelp:
 		return m.viewHelp()
+	case viewAdd:
+		return m.viewAdd()
 	}
 
 	return ""
@@ -393,7 +494,7 @@ func (m *model) viewMain() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("\nControls: space=toggle, d=delete, s=save, /=search, ?=help, q=quit"))
+	b.WriteString(helpStyle.Render("\nControls: space=toggle, a=add, d=delete, s=save, /=search, ?=help, q=quit"))
 
 	return b.String()
 }
@@ -429,6 +530,7 @@ Navigation:
 
 Actions:
   space     Toggle entry enabled/disabled
+  a         Add new entry
   d         Delete entry
   s         Save changes to hosts file
   r         Refresh entry list
@@ -448,6 +550,48 @@ Search:
 	b.WriteString(helpText)
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Press ? or h to return to main view"))
+
+	return b.String()
+}
+
+func (m *model) viewAdd() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Add New Entry"))
+	b.WriteString("\n\n")
+
+	// IP field
+	ipLabel := "IP Address:"
+	if m.addField == 0 {
+		ipLabel = selectedStyle.Render("IP Address:")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", ipLabel, m.addIP))
+
+	// Hostnames field
+	hostnamesLabel := "Hostnames:"
+	if m.addField == 1 {
+		hostnamesLabel = selectedStyle.Render("Hostnames:")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", hostnamesLabel, m.addHostnames))
+
+	// Comment field
+	commentLabel := "Comment (optional):"
+	if m.addField == 2 {
+		commentLabel = selectedStyle.Render("Comment (optional):")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", commentLabel, m.addComment))
+
+	// Category field
+	categoryLabel := "Category:"
+	if m.addField == 3 {
+		categoryLabel = selectedStyle.Render("Category:")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", categoryLabel, m.addCategory))
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Press Enter to add entry, Esc to cancel"))
 
 	return b.String()
 }
