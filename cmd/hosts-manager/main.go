@@ -32,7 +32,7 @@ func main() {
 		Use:   "hosts-manager",
 		Short: "Cross-platform hosts file manager",
 		Long: `hosts-manager is a cross-platform CLI tool for managing your hosts file.
-It provides template system, backup/restore, interactive TUI mode, and more.`,
+It provides a template system, backup/restore, interactive TUI mode, and more.`,
 	}
 
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", cfg.General.Verbose, "Enable verbose output")
