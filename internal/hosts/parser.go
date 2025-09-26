@@ -186,21 +186,57 @@ func (hf *HostsFile) Write(filePath string) error {
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
 
-	for _, headerLine := range hf.Header {
-		if _, err := writer.WriteString(headerLine + "\n"); err != nil {
-			return fmt.Errorf("failed to write header: %w", err)
+	// Write managed file header
+	managedHeader := []string{
+		"# This file is currently managed by hosts-manager",
+		"# See https://github.com/brandonhon/hosts-manager for usage",
+		"",
+	}
+
+	for _, line := range managedHeader {
+		if _, err := writer.WriteString(line + "\n"); err != nil {
+			return fmt.Errorf("failed to write managed header: %w", err)
 		}
 	}
 
-	if len(hf.Header) > 0 && !strings.HasSuffix(hf.Header[len(hf.Header)-1], "\n") {
+	// Write original header (if any) but skip if it's our managed header
+	for _, headerLine := range hf.Header {
+		if !strings.Contains(headerLine, "managed by hosts-manager") &&
+			!strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") {
+			if _, err := writer.WriteString(headerLine + "\n"); err != nil {
+				return fmt.Errorf("failed to write header: %w", err)
+			}
+		}
+	}
+
+	// Add spacing only if we have original header content
+	hasOriginalHeader := false
+	for _, headerLine := range hf.Header {
+		if !strings.Contains(headerLine, "managed by hosts-manager") &&
+			!strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") &&
+			strings.TrimSpace(headerLine) != "" {
+			hasOriginalHeader = true
+			break
+		}
+	}
+
+	if hasOriginalHeader {
 		if _, err := writer.WriteString("\n"); err != nil {
 			return err
 		}
 	}
 
-	for _, category := range hf.Categories {
+	// Write categories with cleaner spacing
+	for i, category := range hf.Categories {
 		if len(category.Entries) == 0 {
 			continue
+		}
+
+		// Add separator between categories (but not before first)
+		if i > 0 {
+			if _, err := writer.WriteString("\n"); err != nil {
+				return fmt.Errorf("failed to write category separator: %w", err)
+			}
 		}
 
 		categoryHeader := fmt.Sprintf("# @category %s", category.Name)
@@ -222,15 +258,17 @@ func (hf *HostsFile) Write(filePath string) error {
 				return fmt.Errorf("failed to write entry: %w", err)
 			}
 		}
-
-		if _, err := writer.WriteString("\n"); err != nil {
-			return fmt.Errorf("failed to write separator: %w", err)
-		}
 	}
 
-	for _, footerLine := range hf.Footer {
-		if _, err := writer.WriteString(footerLine + "\n"); err != nil {
-			return fmt.Errorf("failed to write footer: %w", err)
+	// Write footer with spacing if needed
+	if len(hf.Footer) > 0 {
+		if _, err := writer.WriteString("\n"); err != nil {
+			return err
+		}
+		for _, footerLine := range hf.Footer {
+			if _, err := writer.WriteString(footerLine + "\n"); err != nil {
+				return fmt.Errorf("failed to write footer: %w", err)
+			}
 		}
 	}
 
