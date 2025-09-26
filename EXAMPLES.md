@@ -210,6 +210,61 @@ sudo hosts-manager category enable lb-test
 sudo hosts-manager category disable lb-test
 ```
 
+## Interactive TUI Mode
+
+The Terminal User Interface provides an intuitive way to manage hosts entries:
+
+### Starting TUI Mode
+```bash
+hosts-manager tui
+```
+
+### TUI Features and Workflow
+
+#### Adding New Entries
+1. Press `a` to enter add mode
+2. Use `Tab` to navigate between fields:
+   - IP Address (required)
+   - Hostnames (required, space-separated)
+   - Comment (optional)
+   - Category (defaults to config setting)
+3. Press `Enter` to create the entry
+4. Press `Esc` to cancel
+
+Example workflow:
+```
+IP Address: 192.168.1.100
+Hostnames: api.dev auth.dev
+Comment: Development API services
+Category: development
+```
+
+#### Managing Existing Entries
+- Navigate with `↑/↓` or `j/k`
+- Press `Space` to toggle entries enabled/disabled
+- Press `d` to delete entries
+- Press `/` to search and filter entries
+- Press `s` to save changes (shows confirmation)
+
+#### Visual Feedback
+- ✓ indicates enabled entries (green)
+- ✗ indicates disabled entries (gray)
+- Selected entry is highlighted
+- Status messages show operation results
+- Real-time search filtering
+
+### TUI Best Practices
+
+```bash
+# Recommended workflow for bulk changes
+hosts-manager tui
+# 1. Search for entries: /development
+# 2. Toggle multiple entries with space
+# 3. Add new entries with 'a'
+# 4. Save all changes with 's'
+# 5. Confirm save message appears
+```
+
 ## Advanced Use Cases
 
 ### Content Delivery Network (CDN) Testing
