@@ -1,7 +1,7 @@
 # Binaries
 /build/
 /dist/
-hosts-manager
+/hosts-manager
 hosts-manager.exe
 hosts-manager-*
 
