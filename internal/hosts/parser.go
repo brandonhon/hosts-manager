@@ -199,28 +199,43 @@ func (hf *HostsFile) Write(filePath string) error {
 		}
 	}
 
-	// Write original header (if any) but skip if it's our managed header
+	// Write original header (if any) but skip managed headers and compress blank lines
+	var headerLines []string
+	var lastLineWasBlank bool
+
 	for _, headerLine := range hf.Header {
-		if !strings.Contains(headerLine, "managed by hosts-manager") &&
-			!strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") {
-			if _, err := writer.WriteString(headerLine + "\n"); err != nil {
-				return fmt.Errorf("failed to write header: %w", err)
+		// Skip our managed headers
+		if strings.Contains(headerLine, "managed by hosts-manager") ||
+			strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") {
+			continue
+		}
+
+		// Compress multiple blank lines into single blank line
+		if strings.TrimSpace(headerLine) == "" {
+			if !lastLineWasBlank {
+				headerLines = append(headerLines, headerLine)
+				lastLineWasBlank = true
 			}
+		} else {
+			headerLines = append(headerLines, headerLine)
+			lastLineWasBlank = false
 		}
 	}
 
-	// Add spacing only if we have original header content
-	hasOriginalHeader := false
-	for _, headerLine := range hf.Header {
-		if !strings.Contains(headerLine, "managed by hosts-manager") &&
-			!strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") &&
-			strings.TrimSpace(headerLine) != "" {
-			hasOriginalHeader = true
-			break
+	// Remove trailing blank lines from header
+	for len(headerLines) > 0 && strings.TrimSpace(headerLines[len(headerLines)-1]) == "" {
+		headerLines = headerLines[:len(headerLines)-1]
+	}
+
+	// Write the cleaned header lines
+	for _, headerLine := range headerLines {
+		if _, err := writer.WriteString(headerLine + "\n"); err != nil {
+			return fmt.Errorf("failed to write header: %w", err)
 		}
 	}
 
-	if hasOriginalHeader {
+	// Add single separator line if we have original header content
+	if len(headerLines) > 0 {
 		if _, err := writer.WriteString("\n"); err != nil {
 			return err
 		}
