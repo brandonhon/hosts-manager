@@ -3,7 +3,6 @@ package errors
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -150,7 +149,7 @@ func sanitizeUserInfo(message string) string {
 		"C:\\Users\\": "C:\\Users\\[user]\\",
 	}
 	
-	for pattern, replacement := range replacements {
+	for pattern := range replacements {
 		if strings.Contains(message, pattern) {
 			parts := strings.Split(message, pattern)
 			if len(parts) > 1 {
