@@ -292,8 +292,21 @@ func isValidKeyBinding(key string) bool {
 	if len(key) == 0 || len(key) > 10 {
 		return false
 	}
+	
+	// Allow common key bindings
+	validKeys := map[string]bool{
+		"q": true, "?": true, "e": true, "space": true, "d": true, "/": true,
+		"n": true, "p": true, "r": true, "s": true, "a": true, "h": true,
+		"j": true, "k": true, "l": true, "enter": true, "esc": true,
+		"tab": true, "up": true, "down": true, "left": true, "right": true,
+	}
+	
+	if validKeys[strings.ToLower(key)] {
+		return true
+	}
+	
 	// Allow single characters and some special keys
-	validKeyPattern := `^[a-zA-Z0-9?/\s]$|^(ctrl|alt|shift)\+[a-zA-Z0-9]$|^F[0-9]{1,2}$`
+	validKeyPattern := `^[a-zA-Z0-9?/]$|^(ctrl|alt|shift)\+[a-zA-Z0-9]$|^F[0-9]{1,2}$`
 	matched, _ := regexp.MatchString(validKeyPattern, key)
 	return matched
 }
@@ -333,11 +346,13 @@ func containsSuspiciousPath(path string) bool {
 }
 
 func containsSuspiciousTemplate(template string) bool {
+	// Allow basic Go template syntax but check for dangerous patterns
 	suspiciousPatterns := []string{
-		"{{- range", "{{- if", "{{- with",  // Potentially dangerous template constructs
-		"{{ . }}", "{{.}}", // Direct object output without escaping
 		"exec", "system", "cmd", "shell",   // System execution functions
-		"file", "read", "write",            // File operations
+		"file", "read", "write",            // File operations (but allow basic templates)
+		"{{call", "{{with ",               // Potentially dangerous template functions
+		"os.", "runtime.", "unsafe.",       // Dangerous Go packages
+		"import", "package",                // Code injection attempts
 	}
 
 	lowerTemplate := strings.ToLower(template)
