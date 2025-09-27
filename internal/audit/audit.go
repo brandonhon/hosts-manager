@@ -18,21 +18,21 @@ import (
 type EventType string
 
 const (
-	EventHostsAdd      EventType = "hosts_add"
-	EventHostsDelete   EventType = "hosts_delete"
-	EventHostsModify   EventType = "hosts_modify"
-	EventHostsEnable   EventType = "hosts_enable"
-	EventHostsDisable  EventType = "hosts_disable"
-	EventBackupCreate  EventType = "backup_create"
-	EventBackupRestore EventType = "backup_restore"
-	EventBackupDelete  EventType = "backup_delete"
-	EventConfigEdit    EventType = "config_edit"
-	EventImportFile    EventType = "import_file"
-	EventExportFile    EventType = "export_file"
-	EventPrivilegeEsc  EventType = "privilege_escalation"
+	EventHostsAdd       EventType = "hosts_add"
+	EventHostsDelete    EventType = "hosts_delete"
+	EventHostsModify    EventType = "hosts_modify"
+	EventHostsEnable    EventType = "hosts_enable"
+	EventHostsDisable   EventType = "hosts_disable"
+	EventBackupCreate   EventType = "backup_create"
+	EventBackupRestore  EventType = "backup_restore"
+	EventBackupDelete   EventType = "backup_delete"
+	EventConfigEdit     EventType = "config_edit"
+	EventImportFile     EventType = "import_file"
+	EventExportFile     EventType = "export_file"
+	EventPrivilegeEsc   EventType = "privilege_escalation"
 	EventValidationFail EventType = "validation_failure"
-	EventSecurityViol  EventType = "security_violation"
-	EventFileAccess    EventType = "file_access"
+	EventSecurityViol   EventType = "security_violation"
+	EventFileAccess     EventType = "file_access"
 )
 
 // Severity represents the severity level of an audit event
@@ -47,20 +47,20 @@ const (
 
 // AuditEvent represents a single audit event
 type AuditEvent struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	EventType   EventType              `json:"event_type"`
-	Severity    Severity               `json:"severity"`
-	UserID      int                    `json:"user_id"`
-	Username    string                 `json:"username"`
-	ProcessID   int                    `json:"process_id"`
-	Operation   string                 `json:"operation"`
-	Resource    string                 `json:"resource"`
-	Success     bool                   `json:"success"`
-	ErrorMsg    string                 `json:"error_message,omitempty"`
-	Details     map[string]interface{} `json:"details,omitempty"`
-	IPAddress   string                 `json:"ip_address,omitempty"`
-	UserAgent   string                 `json:"user_agent,omitempty"`
-	SessionID   string                 `json:"session_id,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
+	EventType EventType              `json:"event_type"`
+	Severity  Severity               `json:"severity"`
+	UserID    int                    `json:"user_id"`
+	Username  string                 `json:"username"`
+	ProcessID int                    `json:"process_id"`
+	Operation string                 `json:"operation"`
+	Resource  string                 `json:"resource"`
+	Success   bool                   `json:"success"`
+	ErrorMsg  string                 `json:"error_message,omitempty"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	IPAddress string                 `json:"ip_address,omitempty"`
+	UserAgent string                 `json:"user_agent,omitempty"`
+	SessionID string                 `json:"session_id,omitempty"`
 }
 
 // Logger handles security audit logging
@@ -175,8 +175,8 @@ func (l *Logger) LogSecurityViolation(operation, resource, reason string, detail
 // LogValidationFailure logs input validation failures
 func (l *Logger) LogValidationFailure(input, inputType, reason string) {
 	details := map[string]interface{}{
-		"input_type": inputType,
-		"input_data": input,
+		"input_type":     inputType,
+		"input_data":     input,
 		"failure_reason": reason,
 	}
 
@@ -190,7 +190,7 @@ func (l *Logger) LogValidationFailure(input, inputType, reason string) {
 		Details:   sanitizeMapForAuditLog(details),
 	}
 
-	l.Log(event)
+	_ = l.Log(event) // Intentionally ignore error for audit logging
 }
 
 // LogPrivilegeEscalation logs privilege escalation attempts
@@ -209,7 +209,7 @@ func (l *Logger) LogPrivilegeEscalation(operation string, success bool, errorMsg
 		ErrorMsg:  errorMsg,
 	}
 
-	l.Log(event)
+	_ = l.Log(event) // Intentionally ignore error for audit logging
 }
 
 // LogFileOperation logs file access operations
@@ -220,7 +220,7 @@ func (l *Logger) LogFileOperation(operation, filePath string, success bool, erro
 	}
 
 	details := map[string]interface{}{
-		"file_path": filePath,
+		"file_path":      filePath,
 		"operation_type": operation,
 	}
 
@@ -234,7 +234,7 @@ func (l *Logger) LogFileOperation(operation, filePath string, success bool, erro
 		Details:   details,
 	}
 
-	l.Log(event)
+	_ = l.Log(event) // Intentionally ignore error for audit logging
 }
 
 // LogHostsOperation logs hosts file modification operations
@@ -259,8 +259,8 @@ func (l *Logger) LogHostsOperation(operation string, ip string, hostnames []stri
 	}
 
 	details := map[string]interface{}{
-		"ip_address": ip,
-		"hostnames": hostnames,
+		"ip_address":     ip,
+		"hostnames":      hostnames,
 		"operation_type": operation,
 	}
 
@@ -274,7 +274,7 @@ func (l *Logger) LogHostsOperation(operation string, ip string, hostnames []stri
 		Details:   details,
 	}
 
-	l.Log(event)
+	_ = l.Log(event) // Intentionally ignore error for audit logging
 }
 
 // LogBackupOperation logs backup-related operations
@@ -297,7 +297,7 @@ func (l *Logger) LogBackupOperation(operation, backupPath string, success bool, 
 	}
 
 	details := map[string]interface{}{
-		"backup_path": backupPath,
+		"backup_path":    backupPath,
 		"operation_type": operation,
 	}
 
@@ -311,7 +311,7 @@ func (l *Logger) LogBackupOperation(operation, backupPath string, success bool, 
 		Details:   details,
 	}
 
-	l.Log(event)
+	_ = l.Log(event) // Intentionally ignore error for audit logging
 }
 
 // GetLogPath returns the path to the audit log file
@@ -378,7 +378,7 @@ func (l *Logger) rotateIfNeeded() error {
 func (l *Logger) rotateLog() error {
 	logDir := filepath.Dir(l.logPath)
 	logBasename := filepath.Base(l.logPath)
-	
+
 	// Remove the oldest log if we have too many
 	oldestLog := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, l.maxLogs))
 	if _, err := os.Stat(oldestLog); err == nil {
@@ -391,7 +391,7 @@ func (l *Logger) rotateLog() error {
 	for i := l.maxLogs - 1; i >= 1; i-- {
 		oldName := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, i))
 		newName := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, i+1))
-		
+
 		if _, err := os.Stat(oldName); err == nil {
 			if err := os.Rename(oldName, newName); err != nil {
 				return fmt.Errorf("failed to rotate log %s to %s: %w", oldName, newName, err)
@@ -421,13 +421,13 @@ func (l *Logger) compressLog(logPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to stat log file: %w", err)
 	}
-	
+
 	// Set maximum file size for compression (100MB)
 	const maxCompressionSize = 100 * 1024 * 1024
 	if fileInfo.Size() > maxCompressionSize {
 		return fmt.Errorf("log file too large for compression: %d bytes (max: %d)", fileInfo.Size(), maxCompressionSize)
 	}
-	
+
 	// Read the original file
 	originalFile, err := os.Open(logPath)
 	if err != nil {
@@ -453,7 +453,7 @@ func (l *Logger) compressLog(logPath string) error {
 	// Stream the file in chunks to avoid loading entire file in memory
 	const bufferSize = 64 * 1024 // 64KB chunks
 	buffer := make([]byte, bufferSize)
-	
+
 	for {
 		n, err := originalFile.Read(buffer)
 		if err != nil {
@@ -462,7 +462,7 @@ func (l *Logger) compressLog(logPath string) error {
 			}
 			return fmt.Errorf("failed to read from original log: %w", err)
 		}
-		
+
 		if _, writeErr := gzipWriter.Write(buffer[:n]); writeErr != nil {
 			return fmt.Errorf("failed to write compressed data: %w", writeErr)
 		}
@@ -501,13 +501,13 @@ func sanitizeForAuditLog(input string) string {
 	// Remove or replace dangerous characters that could be used for log injection
 	var result strings.Builder
 	maxLength := 1000 // Limit length to prevent excessive log sizes
-	
+
 	for i, r := range input {
 		if i >= maxLength {
 			result.WriteString("...[truncated]")
 			break
 		}
-		
+
 		// Replace control characters and log injection patterns
 		switch {
 		case r == '\n':
@@ -526,7 +526,7 @@ func sanitizeForAuditLog(input string) string {
 			result.WriteRune(r)
 		}
 	}
-	
+
 	return result.String()
 }
 
@@ -535,11 +535,11 @@ func sanitizeMapForAuditLog(data map[string]interface{}) map[string]interface{} 
 	if data == nil {
 		return nil
 	}
-	
+
 	sanitized := make(map[string]interface{})
 	for key, value := range data {
 		sanitizedKey := sanitizeForAuditLog(key)
-		
+
 		switch v := value.(type) {
 		case string:
 			sanitized[sanitizedKey] = sanitizeForAuditLog(v)
@@ -554,6 +554,6 @@ func sanitizeMapForAuditLog(data map[string]interface{}) map[string]interface{} 
 			sanitized[sanitizedKey] = sanitizeForAuditLog(fmt.Sprintf("%v", v))
 		}
 	}
-	
+
 	return sanitized
 }

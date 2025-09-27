@@ -543,7 +543,9 @@ func toggleCategory(categoryName string, enable bool) error {
 		return fmt.Errorf("failed to write hosts file: %w", err)
 	}
 
-	fmt.Printf("%sd category: %s\n", strings.Title(action), categoryName)
+	// Capitalize first letter manually (strings.Title is deprecated)
+	actionCapitalized := strings.ToUpper(action[:1]) + action[1:]
+	fmt.Printf("%sd category: %s\n", actionCapitalized, categoryName)
 	return nil
 }
 
@@ -650,17 +652,17 @@ func validateFilePath(filePath string, allowedDir string) (string, error) {
 func isValidEditor(editor string) bool {
 	// Whitelist of allowed editors - only the base command name, no arguments
 	allowedEditors := map[string]bool{
-		"nano":     true,
-		"vim":      true,
-		"vi":       true,
-		"emacs":    true,
-		"code":     true,
-		"notepad":  true,
-		"notepad++": true,
+		"nano":         true,
+		"vim":          true,
+		"vi":           true,
+		"emacs":        true,
+		"code":         true,
+		"notepad":      true,
+		"notepad++":    true,
 		"sublime_text": true,
-		"atom":     true,
-		"gedit":    true,
-		"kate":     true,
+		"atom":         true,
+		"gedit":        true,
+		"kate":         true,
 	}
 
 	// Extract just the command name (no paths, no arguments)
@@ -668,12 +670,12 @@ func isValidEditor(editor string) bool {
 
 	// Reject if contains suspicious characters
 	if strings.Contains(editorCmd, ";") ||
-	   strings.Contains(editorCmd, "&") ||
-	   strings.Contains(editorCmd, "|") ||
-	   strings.Contains(editorCmd, "`") ||
-	   strings.Contains(editorCmd, "$") ||
-	   strings.Contains(editorCmd, "&&") ||
-	   strings.Contains(editorCmd, "||") {
+		strings.Contains(editorCmd, "&") ||
+		strings.Contains(editorCmd, "|") ||
+		strings.Contains(editorCmd, "`") ||
+		strings.Contains(editorCmd, "$") ||
+		strings.Contains(editorCmd, "&&") ||
+		strings.Contains(editorCmd, "||") {
 		return false
 	}
 
@@ -694,18 +696,18 @@ func runCommand(name string, args ...string) error {
 		if logger, err := audit.NewLogger(); err == nil {
 			logger.LogSecurityViolation("command_execution", name, "null byte in command name", map[string]interface{}{
 				"command": name,
-				"args": args,
+				"args":    args,
 			})
 		}
 		return fmt.Errorf("invalid command: contains null byte")
 	}
-	
+
 	// Validate arguments for suspicious content
 	for i, arg := range args {
 		if strings.ContainsRune(arg, 0) {
 			if logger, err := audit.NewLogger(); err == nil {
 				logger.LogSecurityViolation("command_execution", name, "null byte in command argument", map[string]interface{}{
-					"command": name,
+					"command":   name,
 					"arg_index": i,
 					"arg_value": arg,
 				})
@@ -713,19 +715,19 @@ func runCommand(name string, args ...string) error {
 			return fmt.Errorf("invalid argument: contains null byte")
 		}
 	}
-	
+
 	// Log the command execution attempt for audit trail
 	if logger, err := audit.NewLogger(); err == nil {
 		logger.LogFileOperation("editor_execution", name, true, "")
 	}
-	
+
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	err := cmd.Run()
-	
+
 	// Log execution result
 	if logger, logErr := audit.NewLogger(); logErr == nil {
 		success := err == nil
@@ -735,6 +737,6 @@ func runCommand(name string, args ...string) error {
 		}
 		logger.LogFileOperation("editor_execution_result", name, success, errorMsg)
 	}
-	
+
 	return err
 }
