@@ -8,8 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"hosts-manager/internal/audit"
 )
 
 type Platform struct {
@@ -165,23 +163,36 @@ func (p *Platform) GetDataDir() string {
 	}
 }
 
+// PathSecurityInfo contains information about security issues found during path sanitization
+type PathSecurityInfo struct {
+	Violation     string                 // Type of violation found
+	OriginalPath  string                 // Original unsanitized path  
+	Details       map[string]interface{} // Additional violation details
+	SanitizedPath string                 // The safe fallback path
+}
+
 func (p *Platform) SanitizePath(path string) string {
+	result, _ := p.SanitizePathWithInfo(path)
+	return result
+}
+
+func (p *Platform) SanitizePathWithInfo(path string) (string, *PathSecurityInfo) {
 	// Clean the path to resolve any relative components and remove redundant separators
 	cleanPath := filepath.Clean(path)
 	
 	// Check for path traversal attempts
 	if strings.Contains(cleanPath, "..") {
-		// Log security violation attempt
-		if logger, err := audit.NewLogger(); err == nil {
-			logger.LogSecurityViolation("path_traversal", path, "attempted path traversal in SanitizePath", map[string]interface{}{
-				"original_path": path,
-				"cleaned_path": cleanPath,
-			})
-		}
 		// Return a safe default path with process ID and timestamp to prevent races
 		timestamp := time.Now().Format("20060102-150405")
 		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
-		return filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+		safePath := filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+		
+		return safePath, &PathSecurityInfo{
+			Violation:     "path_traversal",
+			OriginalPath:  path,
+			Details:       map[string]interface{}{"original_path": path, "cleaned_path": cleanPath},
+			SanitizedPath: safePath,
+		}
 	}
 	
 	// Additional validation for absolute paths to prevent access outside expected directories
@@ -190,23 +201,36 @@ func (p *Platform) SanitizePath(path string) string {
 		// If we can't get absolute path, return safe default with unique identifier
 		timestamp := time.Now().Format("20060102-150405")
 		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
-		return filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+		safePath := filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+		
+		return safePath, &PathSecurityInfo{
+			Violation:     "path_resolution_failed",
+			OriginalPath:  path,
+			Details:       map[string]interface{}{"error": err.Error()},
+			SanitizedPath: safePath,
+		}
 	}
 	
 	// Ensure the path doesn't contain null bytes or other dangerous characters
 	if strings.ContainsRune(abs, 0) {
-		if logger, err := audit.NewLogger(); err == nil {
-			logger.LogSecurityViolation("null_byte_injection", path, "null byte detected in path", nil)
-		}
+		// Return safe fallback
 		timestamp := time.Now().Format("20060102-150405")
 		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
-		return filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+		safePath := filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+		
+		return safePath, &PathSecurityInfo{
+			Violation:     "null_byte_injection",
+			OriginalPath:  path,
+			Details:       nil,
+			SanitizedPath: safePath,
+		}
 	}
 	
+	// No security issues found, return sanitized path
 	switch runtime.GOOS {
 	case "windows":
-		return strings.ReplaceAll(abs, "/", "\\")
+		return strings.ReplaceAll(abs, "/", "\\"), nil
 	default:
-		return strings.ReplaceAll(abs, "\\", "/")
+		return strings.ReplaceAll(abs, "\\", "/"), nil
 	}
 }
