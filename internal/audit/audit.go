@@ -1,11 +1,15 @@
 package audit
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode"
 
 	"hosts-manager/pkg/platform"
 )
@@ -64,6 +68,8 @@ type Logger struct {
 	logPath    string
 	enabled    bool
 	minLevel   Severity
+	maxLogSize int64 // Maximum size in bytes before rotation
+	maxLogs    int   // Maximum number of rotated logs to keep
 }
 
 // NewLogger creates a new audit logger
@@ -79,9 +85,11 @@ func NewLogger() (*Logger, error) {
 	logPath := filepath.Join(logDir, "audit.log")
 
 	return &Logger{
-		logPath:  logPath,
-		enabled:  true,
-		minLevel: SeverityInfo,
+		logPath:    logPath,
+		enabled:    true,
+		minLevel:   SeverityInfo,
+		maxLogSize: 10 * 1024 * 1024, // 10MB default
+		maxLogs:    5,                // Keep 5 rotated logs
 	}, nil
 }
 
@@ -117,6 +125,12 @@ func (l *Logger) Log(event AuditEvent) error {
 		return fmt.Errorf("failed to serialize audit event: %w", err)
 	}
 
+	// Check if log rotation is needed
+	if err := l.rotateIfNeeded(); err != nil {
+		// Log rotation failure shouldn't prevent logging, but we should note it
+		fmt.Fprintf(os.Stderr, "Warning: audit log rotation failed: %v\n", err)
+	}
+
 	// Append to audit log file with secure permissions
 	file, err := os.OpenFile(l.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
@@ -144,11 +158,11 @@ func (l *Logger) LogSecurityViolation(operation, resource, reason string, detail
 	event := AuditEvent{
 		EventType: EventSecurityViol,
 		Severity:  SeverityCritical,
-		Operation: operation,
-		Resource:  resource,
+		Operation: sanitizeForAuditLog(operation),
+		Resource:  sanitizeForAuditLog(resource),
 		Success:   false,
-		ErrorMsg:  reason,
-		Details:   details,
+		ErrorMsg:  sanitizeForAuditLog(reason),
+		Details:   sanitizeMapForAuditLog(details),
 	}
 
 	if err := l.Log(event); err != nil {
@@ -170,10 +184,10 @@ func (l *Logger) LogValidationFailure(input, inputType, reason string) {
 		EventType: EventValidationFail,
 		Severity:  SeverityWarning,
 		Operation: "input_validation",
-		Resource:  inputType,
+		Resource:  sanitizeForAuditLog(inputType),
 		Success:   false,
-		ErrorMsg:  reason,
-		Details:   details,
+		ErrorMsg:  sanitizeForAuditLog(reason),
+		Details:   sanitizeMapForAuditLog(details),
 	}
 
 	l.Log(event)
@@ -338,4 +352,208 @@ func (l *Logger) GetRecentEvents(limit int) ([]AuditEvent, error) {
 	}
 
 	return events, nil
+}
+
+// rotateIfNeeded checks if the current log file exceeds the size limit and rotates it
+func (l *Logger) rotateIfNeeded() error {
+	// Check current log file size
+	info, err := os.Stat(l.logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // No log file yet, no rotation needed
+		}
+		return fmt.Errorf("failed to stat audit log: %w", err)
+	}
+
+	// If size is under limit, no rotation needed
+	if info.Size() < l.maxLogSize {
+		return nil
+	}
+
+	// Perform rotation
+	return l.rotateLog()
+}
+
+// rotateLog performs the actual log rotation
+func (l *Logger) rotateLog() error {
+	logDir := filepath.Dir(l.logPath)
+	logBasename := filepath.Base(l.logPath)
+	
+	// Remove the oldest log if we have too many
+	oldestLog := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, l.maxLogs))
+	if _, err := os.Stat(oldestLog); err == nil {
+		if err := os.Remove(oldestLog); err != nil {
+			return fmt.Errorf("failed to remove oldest log: %w", err)
+		}
+	}
+
+	// Shift existing rotated logs
+	for i := l.maxLogs - 1; i >= 1; i-- {
+		oldName := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, i))
+		newName := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, i+1))
+		
+		if _, err := os.Stat(oldName); err == nil {
+			if err := os.Rename(oldName, newName); err != nil {
+				return fmt.Errorf("failed to rotate log %s to %s: %w", oldName, newName, err)
+			}
+		}
+	}
+
+	// Move current log to .1
+	rotatedName := filepath.Join(logDir, fmt.Sprintf("%s.1", logBasename))
+	if err := os.Rename(l.logPath, rotatedName); err != nil {
+		return fmt.Errorf("failed to rotate current log: %w", err)
+	}
+
+	// Compress rotated log to save space
+	if err := l.compressLog(rotatedName); err != nil {
+		// Compression failure is not critical, just log it
+		fmt.Fprintf(os.Stderr, "Warning: failed to compress rotated log %s: %v\n", rotatedName, err)
+	}
+
+	return nil
+}
+
+// compressLog compresses a rotated log file with streaming and size limits
+func (l *Logger) compressLog(logPath string) error {
+	// Check file size before compression to prevent memory exhaustion
+	fileInfo, err := os.Stat(logPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat log file: %w", err)
+	}
+	
+	// Set maximum file size for compression (100MB)
+	const maxCompressionSize = 100 * 1024 * 1024
+	if fileInfo.Size() > maxCompressionSize {
+		return fmt.Errorf("log file too large for compression: %d bytes (max: %d)", fileInfo.Size(), maxCompressionSize)
+	}
+	
+	// Read the original file
+	originalFile, err := os.Open(logPath)
+	if err != nil {
+		return fmt.Errorf("failed to open log for compression: %w", err)
+	}
+	defer originalFile.Close()
+
+	// Create compressed file
+	compressedPath := logPath + ".gz"
+	compressedFile, err := os.Create(compressedPath)
+	if err != nil {
+		return fmt.Errorf("failed to create compressed log: %w", err)
+	}
+	defer compressedFile.Close()
+
+	// Create gzip writer with optimized compression settings
+	gzipWriter, err := gzip.NewWriterLevel(compressedFile, gzip.BestSpeed)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip writer: %w", err)
+	}
+	defer gzipWriter.Close()
+
+	// Stream the file in chunks to avoid loading entire file in memory
+	const bufferSize = 64 * 1024 // 64KB chunks
+	buffer := make([]byte, bufferSize)
+	
+	for {
+		n, err := originalFile.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("failed to read from original log: %w", err)
+		}
+		
+		if _, writeErr := gzipWriter.Write(buffer[:n]); writeErr != nil {
+			return fmt.Errorf("failed to write compressed data: %w", writeErr)
+		}
+	}
+
+	// Ensure all data is written
+	if err := gzipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to finalize compression: %w", err)
+	}
+
+	// Verify compressed file was created successfully
+	if compressedInfo, statErr := os.Stat(compressedPath); statErr != nil || compressedInfo.Size() == 0 {
+		return fmt.Errorf("compressed file verification failed")
+	}
+
+	// Remove original uncompressed file only after successful compression
+	if err := os.Remove(logPath); err != nil {
+		return fmt.Errorf("failed to remove original log after compression: %w", err)
+	}
+
+	return nil
+}
+
+// SetMaxLogSize sets the maximum log size before rotation
+func (l *Logger) SetMaxLogSize(size int64) {
+	l.maxLogSize = size
+}
+
+// SetMaxLogs sets the maximum number of rotated logs to keep
+func (l *Logger) SetMaxLogs(count int) {
+	l.maxLogs = count
+}
+
+// sanitizeForAuditLog sanitizes input to prevent log injection attacks
+func sanitizeForAuditLog(input string) string {
+	// Remove or replace dangerous characters that could be used for log injection
+	var result strings.Builder
+	maxLength := 1000 // Limit length to prevent excessive log sizes
+	
+	for i, r := range input {
+		if i >= maxLength {
+			result.WriteString("...[truncated]")
+			break
+		}
+		
+		// Replace control characters and log injection patterns
+		switch {
+		case r == '\n':
+			result.WriteString("\\n")
+		case r == '\r':
+			result.WriteString("\\r")
+		case r == '\t':
+			result.WriteString("\\t")
+		case unicode.IsControl(r):
+			result.WriteString(fmt.Sprintf("\\u%04x", r))
+		case r == '"':
+			result.WriteString("\\\"")
+		case r == '\\':
+			result.WriteString("\\\\")
+		default:
+			result.WriteRune(r)
+		}
+	}
+	
+	return result.String()
+}
+
+// sanitizeMapForAuditLog sanitizes a map of interface{} values for audit logging
+func sanitizeMapForAuditLog(data map[string]interface{}) map[string]interface{} {
+	if data == nil {
+		return nil
+	}
+	
+	sanitized := make(map[string]interface{})
+	for key, value := range data {
+		sanitizedKey := sanitizeForAuditLog(key)
+		
+		switch v := value.(type) {
+		case string:
+			sanitized[sanitizedKey] = sanitizeForAuditLog(v)
+		case []string:
+			sanitizedSlice := make([]string, len(v))
+			for i, s := range v {
+				sanitizedSlice[i] = sanitizeForAuditLog(s)
+			}
+			sanitized[sanitizedKey] = sanitizedSlice
+		default:
+			// For other types, convert to string and sanitize
+			sanitized[sanitizedKey] = sanitizeForAuditLog(fmt.Sprintf("%v", v))
+		}
+	}
+	
+	return sanitized
 }

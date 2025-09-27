@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
+
+	"hosts-manager/internal/audit"
 )
 
 type Platform struct {
@@ -162,10 +166,47 @@ func (p *Platform) GetDataDir() string {
 }
 
 func (p *Platform) SanitizePath(path string) string {
+	// Clean the path to resolve any relative components and remove redundant separators
+	cleanPath := filepath.Clean(path)
+	
+	// Check for path traversal attempts
+	if strings.Contains(cleanPath, "..") {
+		// Log security violation attempt
+		if logger, err := audit.NewLogger(); err == nil {
+			logger.LogSecurityViolation("path_traversal", path, "attempted path traversal in SanitizePath", map[string]interface{}{
+				"original_path": path,
+				"cleaned_path": cleanPath,
+			})
+		}
+		// Return a safe default path with process ID and timestamp to prevent races
+		timestamp := time.Now().Format("20060102-150405")
+		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
+		return filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+	}
+	
+	// Additional validation for absolute paths to prevent access outside expected directories
+	abs, err := filepath.Abs(cleanPath)
+	if err != nil {
+		// If we can't get absolute path, return safe default with unique identifier
+		timestamp := time.Now().Format("20060102-150405")
+		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
+		return filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+	}
+	
+	// Ensure the path doesn't contain null bytes or other dangerous characters
+	if strings.ContainsRune(abs, 0) {
+		if logger, err := audit.NewLogger(); err == nil {
+			logger.LogSecurityViolation("null_byte_injection", path, "null byte detected in path", nil)
+		}
+		timestamp := time.Now().Format("20060102-150405")
+		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
+		return filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
+	}
+	
 	switch runtime.GOOS {
 	case "windows":
-		return strings.ReplaceAll(path, "/", "\\")
+		return strings.ReplaceAll(abs, "/", "\\")
 	default:
-		return strings.ReplaceAll(path, "\\", "/")
+		return strings.ReplaceAll(abs, "\\", "/")
 	}
 }
