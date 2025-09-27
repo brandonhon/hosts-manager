@@ -8,6 +8,7 @@ import (
 	"hosts-manager/internal/audit"
 	"hosts-manager/internal/backup"
 	"hosts-manager/internal/config"
+	"hosts-manager/internal/errors"
 	"hosts-manager/internal/hosts"
 	"hosts-manager/pkg/platform"
 	"hosts-manager/pkg/search"
@@ -57,7 +58,13 @@ It provides a template system, backup/restore, interactive TUI mode, and more.`,
 	)
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// Sanitize error for user display while logging full error for debugging
+		if logger, logErr := audit.NewLogger(); logErr == nil && errors.IsSecuritySensitive(err) {
+			logger.LogSecurityViolation("command_execution", "root_command", err.Error(), nil)
+		}
+		
+		sanitizedErr := errors.SanitizeError(err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", sanitizedErr)
 		os.Exit(1)
 	}
 }

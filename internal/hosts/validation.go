@@ -85,16 +85,18 @@ func validateIPSecurity(ip net.IP) error {
 	if ip.To4() == nil { // IPv6
 		ipStr := ip.String()
 
-		// Reject IPv6 special addresses that could be problematic
-		dangerousIPv6Prefixes := []string{
-			"ff", // Multicast (already caught above, but double-check)
-			"fe80", // Link-local (could be problematic in some contexts)
+		// Check for IPv6 multicast addresses (still reject these)
+		if strings.HasPrefix(strings.ToLower(ipStr), "ff") {
+			return fmt.Errorf("IPv6 multicast addresses not allowed: %s", ipStr)
 		}
 
-		for _, prefix := range dangerousIPv6Prefixes {
-			if strings.HasPrefix(strings.ToLower(ipStr), prefix) {
-				return fmt.Errorf("potentially problematic IPv6 address: %s", ipStr)
+		// Allow IPv6 link-local but log a warning
+		if strings.HasPrefix(strings.ToLower(ipStr), "fe80") {
+			// Log warning for link-local addresses
+			if logger, err := audit.NewLogger(); err == nil {
+				logger.LogValidationFailure(ipStr, "ipv6_link_local_warning", "IPv6 link-local address used - may not work in all network contexts")
 			}
+			// Allow the address but it will continue with a logged warning
 		}
 	}
 
