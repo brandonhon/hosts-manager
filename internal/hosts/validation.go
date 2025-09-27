@@ -16,12 +16,12 @@ var (
 
 	// Dangerous patterns to reject
 	dangerousHostnamePatterns = []*regexp.Regexp{
-		regexp.MustCompile(`\.\./`),                    // Path traversal
-		regexp.MustCompile(`[<>\"'&]`),                 // HTML/Script injection chars
-		regexp.MustCompile(`[\x00-\x1f\x7f-\x9f]`),     // Control characters
-		regexp.MustCompile(`^\.+$`),                    // Only dots
-		regexp.MustCompile(`\.$`),                      // Trailing dot (may cause issues)
-		regexp.MustCompile(`\s`),                       // Whitespace
+		regexp.MustCompile(`\.\./`),                // Path traversal
+		regexp.MustCompile(`[<>\"'&]`),             // HTML/Script injection chars
+		regexp.MustCompile(`[\x00-\x1f\x7f-\x9f]`), // Control characters
+		regexp.MustCompile(`^\.+$`),                // Only dots
+		regexp.MustCompile(`\.$`),                  // Trailing dot (may cause issues)
+		regexp.MustCompile(`\s`),                   // Whitespace
 	}
 )
 
@@ -112,11 +112,11 @@ func isPrivateIP(ip net.IP) bool {
 
 	// Additional ranges to consider private/local
 	privateRanges := []string{
-		"127.0.0.0/8",     // Loopback
-		"169.254.0.0/16",  // Link-local
-		"::1/128",         // IPv6 loopback
-		"fc00::/7",        // IPv6 unique local
-		"fe80::/10",       // IPv6 link-local
+		"127.0.0.0/8",    // Loopback
+		"169.254.0.0/16", // Link-local
+		"::1/128",        // IPv6 loopback
+		"fc00::/7",       // IPv6 unique local
+		"fe80::/10",      // IPv6 link-local
 	}
 
 	for _, cidr := range privateRanges {
@@ -233,7 +233,7 @@ func containsHomographs(hostname string) bool {
 	// Simple check for common homograph characters
 	// In a production system, this would be more comprehensive
 	suspiciousChars := []rune{
-		0x430, // Cyrillic 'a'
+		0x430,  // Cyrillic 'a'
 		0x043e, // Cyrillic 'o'
 		0x0440, // Cyrillic 'p'
 		0x0435, // Cyrillic 'e'
@@ -343,6 +343,7 @@ func validateCategoryName(category string) error {
 
 	return nil
 }
+
 // logValidationFailure logs validation failures for security monitoring
 func logValidationFailure(input, inputType, reason string) {
 	// Create audit logger (ignore errors for logging)

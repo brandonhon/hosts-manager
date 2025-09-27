@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"hosts-manager/pkg/platform"
 	"gopkg.in/yaml.v3"
+	"hosts-manager/pkg/platform"
 )
 
 type Config struct {
@@ -33,10 +33,10 @@ type Profile struct {
 }
 
 type UI struct {
-	ColorScheme    string            `yaml:"color_scheme"`
-	ShowLineNumbers bool             `yaml:"show_line_numbers"`
-	PageSize       int               `yaml:"page_size"`
-	KeyBindings    map[string]string `yaml:"key_bindings"`
+	ColorScheme     string            `yaml:"color_scheme"`
+	ShowLineNumbers bool              `yaml:"show_line_numbers"`
+	PageSize        int               `yaml:"page_size"`
+	KeyBindings     map[string]string `yaml:"key_bindings"`
 }
 
 type Backup struct {
@@ -95,16 +95,16 @@ func DefaultConfig() *Config {
 			ShowLineNumbers: true,
 			PageSize:        20,
 			KeyBindings: map[string]string{
-				"quit":        "q",
-				"help":        "?",
-				"edit":        "e",
-				"toggle":      "space",
-				"delete":      "d",
-				"search":      "/",
-				"next_page":   "n",
-				"prev_page":   "p",
-				"refresh":     "r",
-				"save":        "s",
+				"quit":      "q",
+				"help":      "?",
+				"edit":      "e",
+				"toggle":    "space",
+				"delete":    "d",
+				"search":    "/",
+				"next_page": "n",
+				"prev_page": "p",
+				"refresh":   "r",
+				"save":      "s",
 			},
 		},
 		Backup: Backup{

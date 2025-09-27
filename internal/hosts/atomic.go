@@ -81,7 +81,7 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 		os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	
+
 	// Set appropriate permissions on the temporary file
 	if err := tempFile.Chmod(fileMode); err != nil {
 		tempFile.Close()
