@@ -62,7 +62,7 @@ It provides a template system, backup/restore, interactive TUI mode, and more.`,
 		if logger, logErr := audit.NewLogger(); logErr == nil && errors.IsSecuritySensitive(err) {
 			logger.LogSecurityViolation("command_execution", "root_command", err.Error(), nil)
 		}
-		
+
 		sanitizedErr := errors.SanitizeError(err)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", sanitizedErr)
 		os.Exit(1)
@@ -328,7 +328,9 @@ func toggleEntry(hostname string, enable bool) error {
 		return fmt.Errorf("failed to write hosts file: %w", err)
 	}
 
-	fmt.Printf("%sd hostname: %s\n", strings.Title(action), hostname)
+	// Capitalize first letter manually (strings.Title is deprecated)
+	actionCapitalized := strings.ToUpper(action[:1]) + action[1:]
+	fmt.Printf("%sd hostname: %s\n", actionCapitalized, hostname)
 	return nil
 }
 
