@@ -1,11 +1,9 @@
 package errors
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 )
 
 // SanitizedError represents an error with both internal detail and sanitized user message
@@ -38,11 +36,11 @@ func SanitizeError(err error) error {
 
 	errMsg := err.Error()
 	sanitized := SanitizeErrorMessage(errMsg)
-	
+
 	if sanitized != errMsg {
 		return NewSanitizedError(err, sanitized)
 	}
-	
+
 	return err
 }
 
@@ -50,43 +48,25 @@ func SanitizeError(err error) error {
 func SanitizeErrorMessage(message string) string {
 	// Remove full file paths, keep only filenames
 	message = sanitizeFilePaths(message)
-	
+
 	// Remove potential sensitive environment information
 	message = sanitizeEnvironmentInfo(message)
-	
+
 	// Remove potential user information
 	message = sanitizeUserInfo(message)
-	
+
 	// Sanitize common error patterns that might leak information
 	message = sanitizeCommonPatterns(message)
-	
+
 	return message
 }
 
-// safeRegexReplace performs regex replacement with timeout protection
-func safeRegexReplace(pattern *regexp.Regexp, input, replacement string, timeout time.Duration) string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	
-	resultCh := make(chan string, 1)
-	go func() {
-		resultCh <- pattern.ReplaceAllString(input, replacement)
-	}()
-	
-	select {
-	case result := <-resultCh:
-		return result
-	case <-ctx.Done():
-		// Timeout occurred, return input unchanged to be safe
-		return input
-	}
-}
 
 // sanitizeFilePaths removes full paths and keeps only relevant filenames using simple string operations
 func sanitizeFilePaths(message string) string {
 	// Use simple string replacements instead of complex regex to avoid DoS
 	// Replace common path patterns with simplified versions
-	
+
 	// Unix-style paths
 	if strings.Contains(message, "/") {
 		parts := strings.Split(message, "/")
@@ -100,7 +80,7 @@ func sanitizeFilePaths(message string) string {
 			message = strings.Join(parts, "/")
 		}
 	}
-	
+
 	// Windows-style paths
 	if strings.Contains(message, "\\") {
 		parts := strings.Split(message, "\\")
@@ -114,7 +94,7 @@ func sanitizeFilePaths(message string) string {
 			message = strings.Join(parts, "\\")
 		}
 	}
-	
+
 	return message
 }
 
@@ -130,25 +110,25 @@ func sanitizeEnvironmentInfo(message string) string {
 		{regexp.MustCompile(`(?i)cannot access.*`), "file access error"},
 		{regexp.MustCompile(`(?i)operation not permitted.*`), "operation not allowed"},
 	}
-	
+
 	for _, p := range patterns {
 		message = p.pattern.ReplaceAllString(message, p.replacement)
 	}
-	
+
 	return message
 }
 
 // sanitizeUserInfo removes potentially sensitive user information using safe string operations
 func sanitizeUserInfo(message string) string {
 	// Use simple string replacements instead of regex to avoid DoS attacks
-	
+
 	// Replace common user path patterns
 	replacements := map[string]string{
 		"/Users/":     "/Users/[user]/",
 		"/home/":      "/home/[user]/",
 		"C:\\Users\\": "C:\\Users\\[user]\\",
 	}
-	
+
 	for pattern := range replacements {
 		if strings.Contains(message, pattern) {
 			parts := strings.Split(message, pattern)
@@ -164,7 +144,7 @@ func sanitizeUserInfo(message string) string {
 			}
 		}
 	}
-	
+
 	// Simple PID sanitization using string operations
 	if strings.Contains(message, "pid ") {
 		words := strings.Fields(message)
@@ -175,7 +155,7 @@ func sanitizeUserInfo(message string) string {
 		}
 		message = strings.Join(words, " ")
 	}
-	
+
 	// Simple process ID sanitization
 	if strings.Contains(message, "process ") {
 		words := strings.Fields(message)
@@ -186,7 +166,7 @@ func sanitizeUserInfo(message string) string {
 		}
 		message = strings.Join(words, " ")
 	}
-	
+
 	// Simple IP address sanitization (basic pattern)
 	words := strings.Fields(message)
 	for i, word := range words {
@@ -195,7 +175,7 @@ func sanitizeUserInfo(message string) string {
 		}
 	}
 	message = strings.Join(words, " ")
-	
+
 	return message
 }
 
@@ -240,21 +220,21 @@ func isSimpleIPv4(s string) bool {
 func sanitizeCommonPatterns(message string) string {
 	// Replace specific error types with generic messages
 	replacements := map[string]string{
-		"bind: address already in use":     "network resource busy",
-		"connection refused":               "connection failed",
-		"network is unreachable":          "network error",
-		"device or resource busy":         "resource unavailable",
-		"operation timed out":             "operation timeout",
-		"broken pipe":                     "connection interrupted",
+		"bind: address already in use": "network resource busy",
+		"connection refused":           "connection failed",
+		"network is unreachable":       "network error",
+		"device or resource busy":      "resource unavailable",
+		"operation timed out":          "operation timeout",
+		"broken pipe":                  "connection interrupted",
 	}
-	
+
 	lowerMsg := strings.ToLower(message)
 	for pattern, replacement := range replacements {
 		if strings.Contains(lowerMsg, pattern) {
 			return replacement
 		}
 	}
-	
+
 	return message
 }
 
@@ -269,7 +249,7 @@ func FormatUserError(operation string, err error) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	sanitized := SanitizeError(err)
 	return fmt.Errorf("%s failed: %v", operation, sanitized)
 }
@@ -279,11 +259,11 @@ func IsSecuritySensitive(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errMsg := strings.ToLower(err.Error())
 	sensitivePatterns := []string{
 		"permission denied",
-		"access denied", 
+		"access denied",
 		"unauthorized",
 		"forbidden",
 		"authentication",
@@ -293,12 +273,12 @@ func IsSecuritySensitive(err error) bool {
 		"key",
 		"certificate",
 	}
-	
+
 	for _, pattern := range sensitivePatterns {
 		if strings.Contains(errMsg, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
