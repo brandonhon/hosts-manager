@@ -21,23 +21,43 @@ type AtomicFileWriter struct {
 func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	// Create temporary file in the same directory to ensure atomic rename
 	dir := filepath.Dir(targetPath)
-	tempPath := filepath.Join(dir, "."+filepath.Base(targetPath)+".tmp")
 	lockPath := targetPath + ".lock"
 
-	// Create lock file first
+	// Create lock file first with O_EXCL for atomic creation
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		if os.IsExist(err) {
-			return nil, fmt.Errorf("file is locked by another process: %s", targetPath)
+			// Check if lock file is stale (older than 5 minutes)
+			if info, statErr := os.Stat(lockPath); statErr == nil {
+				age := time.Since(info.ModTime())
+				if age > 5*time.Minute {
+					// Attempt to clean up stale lock file
+					if rmErr := os.Remove(lockPath); rmErr == nil {
+						// Retry lock file creation
+						lockFile, err = os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+						if err != nil {
+							return nil, fmt.Errorf("failed to create lock file after cleanup: %w", err)
+						}
+					} else {
+						return nil, fmt.Errorf("file is locked by another process (stale lock cleanup failed): %s", targetPath)
+					}
+				} else {
+					return nil, fmt.Errorf("file is locked by another process: %s", targetPath)
+				}
+			} else {
+				return nil, fmt.Errorf("file is locked by another process: %s", targetPath)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create lock file: %w", err)
 		}
-		return nil, fmt.Errorf("failed to create lock file: %w", err)
 	}
 
-	// Write PID to lock file for debugging
-	if _, err := fmt.Fprintf(lockFile, "%d\n", os.Getpid()); err != nil {
+	// Write PID and timestamp to lock file for debugging and stale detection
+	lockInfo := fmt.Sprintf("%d\n%s\n", os.Getpid(), time.Now().Format(time.RFC3339))
+	if _, err := lockFile.WriteString(lockInfo); err != nil {
 		lockFile.Close()
 		os.Remove(lockPath)
-		return nil, fmt.Errorf("failed to write PID to lock file: %w", err)
+		return nil, fmt.Errorf("failed to write lock info to lock file: %w", err)
 	}
 
 	// Acquire exclusive lock
@@ -53,18 +73,28 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 		fileMode = stat.Mode()
 	}
 
-	// Create temporary file
-	tempFile, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
+	// Create secure temporary file using os.CreateTemp in the same directory
+	tempFile, err := os.CreateTemp(dir, "."+filepath.Base(targetPath)+".tmp.*")
 	if err != nil {
 		syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
 		lockFile.Close()
 		os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to create temporary file: %w", err)
 	}
+	
+	// Set appropriate permissions on the temporary file
+	if err := tempFile.Chmod(fileMode); err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		lockFile.Close()
+		os.Remove(lockPath)
+		return nil, fmt.Errorf("failed to set permissions on temporary file: %w", err)
+	}
 
 	return &AtomicFileWriter{
 		targetPath: targetPath,
-		tempPath:   tempPath,
+		tempPath:   tempFile.Name(), // Use the actual secure temporary file name
 		lockFile:   lockFile,
 		tempFile:   tempFile,
 	}, nil

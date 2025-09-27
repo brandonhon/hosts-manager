@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"hosts-manager/internal/audit"
 	"hosts-manager/internal/backup"
 	"hosts-manager/internal/config"
 	"hosts-manager/internal/hosts"
@@ -688,9 +689,52 @@ func isValidEditor(editor string) bool {
 }
 
 func runCommand(name string, args ...string) error {
+	// Additional security validation before execution
+	if strings.ContainsRune(name, 0) {
+		if logger, err := audit.NewLogger(); err == nil {
+			logger.LogSecurityViolation("command_execution", name, "null byte in command name", map[string]interface{}{
+				"command": name,
+				"args": args,
+			})
+		}
+		return fmt.Errorf("invalid command: contains null byte")
+	}
+	
+	// Validate arguments for suspicious content
+	for i, arg := range args {
+		if strings.ContainsRune(arg, 0) {
+			if logger, err := audit.NewLogger(); err == nil {
+				logger.LogSecurityViolation("command_execution", name, "null byte in command argument", map[string]interface{}{
+					"command": name,
+					"arg_index": i,
+					"arg_value": arg,
+				})
+			}
+			return fmt.Errorf("invalid argument: contains null byte")
+		}
+	}
+	
+	// Log the command execution attempt for audit trail
+	if logger, err := audit.NewLogger(); err == nil {
+		logger.LogFileOperation("editor_execution", name, true, "")
+	}
+	
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	
+	err := cmd.Run()
+	
+	// Log execution result
+	if logger, logErr := audit.NewLogger(); logErr == nil {
+		success := err == nil
+		errorMsg := ""
+		if err != nil {
+			errorMsg = err.Error()
+		}
+		logger.LogFileOperation("editor_execution_result", name, success, errorMsg)
+	}
+	
+	return err
 }

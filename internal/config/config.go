@@ -170,10 +170,22 @@ func Load() (*Config, error) {
 		config.Backup.Directory = filepath.Join(p.GetDataDir(), "backups")
 	}
 
+	// Validate the loaded configuration
+	validator := NewValidator()
+	if err := validator.Validate(config); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	return config, nil
 }
 
 func Save(config *Config) error {
+	// Validate configuration before saving
+	validator := NewValidator()
+	if err := validator.Validate(config); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	p := platform.New()
 	configDir := p.GetConfigDir()
 
