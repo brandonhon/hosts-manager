@@ -166,7 +166,7 @@ func (p *Platform) GetDataDir() string {
 // PathSecurityInfo contains information about security issues found during path sanitization
 type PathSecurityInfo struct {
 	Violation     string                 // Type of violation found
-	OriginalPath  string                 // Original unsanitized path  
+	OriginalPath  string                 // Original unsanitized path
 	Details       map[string]interface{} // Additional violation details
 	SanitizedPath string                 // The safe fallback path
 }
@@ -179,14 +179,14 @@ func (p *Platform) SanitizePath(path string) string {
 func (p *Platform) SanitizePathWithInfo(path string) (string, *PathSecurityInfo) {
 	// Clean the path to resolve any relative components and remove redundant separators
 	cleanPath := filepath.Clean(path)
-	
+
 	// Check for path traversal attempts
 	if strings.Contains(cleanPath, "..") {
 		// Return a safe default path with process ID and timestamp to prevent races
 		timestamp := time.Now().Format("20060102-150405")
 		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
 		safePath := filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
-		
+
 		return safePath, &PathSecurityInfo{
 			Violation:     "path_traversal",
 			OriginalPath:  path,
@@ -194,7 +194,7 @@ func (p *Platform) SanitizePathWithInfo(path string) (string, *PathSecurityInfo)
 			SanitizedPath: safePath,
 		}
 	}
-	
+
 	// Additional validation for absolute paths to prevent access outside expected directories
 	abs, err := filepath.Abs(cleanPath)
 	if err != nil {
@@ -202,7 +202,7 @@ func (p *Platform) SanitizePathWithInfo(path string) (string, *PathSecurityInfo)
 		timestamp := time.Now().Format("20060102-150405")
 		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
 		safePath := filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
-		
+
 		return safePath, &PathSecurityInfo{
 			Violation:     "path_resolution_failed",
 			OriginalPath:  path,
@@ -210,14 +210,14 @@ func (p *Platform) SanitizePathWithInfo(path string) (string, *PathSecurityInfo)
 			SanitizedPath: safePath,
 		}
 	}
-	
+
 	// Ensure the path doesn't contain null bytes or other dangerous characters
 	if strings.ContainsRune(abs, 0) {
 		// Return safe fallback
 		timestamp := time.Now().Format("20060102-150405")
 		fallbackName := fmt.Sprintf("safe_fallback_%d_%s", os.Getpid(), timestamp)
 		safePath := filepath.Join(filepath.Dir(p.GetHostsFilePath()), fallbackName)
-		
+
 		return safePath, &PathSecurityInfo{
 			Violation:     "null_byte_injection",
 			OriginalPath:  path,
@@ -225,7 +225,7 @@ func (p *Platform) SanitizePathWithInfo(path string) (string, *PathSecurityInfo)
 			SanitizedPath: safePath,
 		}
 	}
-	
+
 	// No security issues found, return sanitized path
 	switch runtime.GOOS {
 	case "windows":

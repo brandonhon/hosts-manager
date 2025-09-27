@@ -181,106 +181,106 @@ func (hf *HostsFile) Write(filePath string) error {
 		writer := bufio.NewWriter(file)
 		defer writer.Flush()
 
-	// Write managed file header
-	managedHeader := []string{
-		"# This file is currently managed by hosts-manager",
-		"# See https://github.com/brandonhon/hosts-manager for usage",
-		"",
-	}
-
-	for _, line := range managedHeader {
-		if _, err := writer.WriteString(line + "\n"); err != nil {
-			return fmt.Errorf("failed to write managed header: %w", err)
-		}
-	}
-
-	// Write original header (if any) but skip managed headers and compress blank lines
-	var headerLines []string
-	var lastLineWasBlank bool
-
-	for _, headerLine := range hf.Header {
-		// Skip our managed headers
-		if strings.Contains(headerLine, "managed by hosts-manager") ||
-			strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") {
-			continue
+		// Write managed file header
+		managedHeader := []string{
+			"# This file is currently managed by hosts-manager",
+			"# See https://github.com/brandonhon/hosts-manager for usage",
+			"",
 		}
 
-		// Compress multiple blank lines into single blank line
-		if strings.TrimSpace(headerLine) == "" {
-			if !lastLineWasBlank {
-				headerLines = append(headerLines, headerLine)
-				lastLineWasBlank = true
-			}
-		} else {
-			headerLines = append(headerLines, headerLine)
-			lastLineWasBlank = false
-		}
-	}
-
-	// Remove trailing blank lines from header
-	for len(headerLines) > 0 && strings.TrimSpace(headerLines[len(headerLines)-1]) == "" {
-		headerLines = headerLines[:len(headerLines)-1]
-	}
-
-	// Write the cleaned header lines
-	for _, headerLine := range headerLines {
-		if _, err := writer.WriteString(headerLine + "\n"); err != nil {
-			return fmt.Errorf("failed to write header: %w", err)
-		}
-	}
-
-	// Add single separator line if we have original header content
-	if len(headerLines) > 0 {
-		if _, err := writer.WriteString("\n"); err != nil {
-			return err
-		}
-	}
-
-	// Write categories with cleaner spacing
-	for i, category := range hf.Categories {
-		if len(category.Entries) == 0 {
-			continue
-		}
-
-		// Add separator between categories (but not before first)
-		if i > 0 {
-			if _, err := writer.WriteString("\n"); err != nil {
-				return fmt.Errorf("failed to write category separator: %w", err)
-			}
-		}
-
-		categoryHeader := fmt.Sprintf("# @category %s", category.Name)
-		if category.Description != "" {
-			categoryHeader += " " + category.Description
-		}
-		if _, err := writer.WriteString(categoryHeader + "\n"); err != nil {
-			return fmt.Errorf("failed to write category header: %w", err)
-		}
-
-		sectionHeader := fmt.Sprintf("# =============== %s ===============", strings.ToUpper(category.Name))
-		if _, err := writer.WriteString(sectionHeader + "\n"); err != nil {
-			return fmt.Errorf("failed to write section header: %w", err)
-		}
-
-		for _, entry := range category.Entries {
-			line := formatEntry(entry)
+		for _, line := range managedHeader {
 			if _, err := writer.WriteString(line + "\n"); err != nil {
-				return fmt.Errorf("failed to write entry: %w", err)
+				return fmt.Errorf("failed to write managed header: %w", err)
 			}
 		}
-	}
 
-	// Write footer with spacing if needed
-	if len(hf.Footer) > 0 {
-		if _, err := writer.WriteString("\n"); err != nil {
-			return err
-		}
-		for _, footerLine := range hf.Footer {
-			if _, err := writer.WriteString(footerLine + "\n"); err != nil {
-				return fmt.Errorf("failed to write footer: %w", err)
+		// Write original header (if any) but skip managed headers and compress blank lines
+		var headerLines []string
+		var lastLineWasBlank bool
+
+		for _, headerLine := range hf.Header {
+			// Skip our managed headers
+			if strings.Contains(headerLine, "managed by hosts-manager") ||
+				strings.Contains(headerLine, "github.com/brandonhon/hosts-manager") {
+				continue
+			}
+
+			// Compress multiple blank lines into single blank line
+			if strings.TrimSpace(headerLine) == "" {
+				if !lastLineWasBlank {
+					headerLines = append(headerLines, headerLine)
+					lastLineWasBlank = true
+				}
+			} else {
+				headerLines = append(headerLines, headerLine)
+				lastLineWasBlank = false
 			}
 		}
-	}
+
+		// Remove trailing blank lines from header
+		for len(headerLines) > 0 && strings.TrimSpace(headerLines[len(headerLines)-1]) == "" {
+			headerLines = headerLines[:len(headerLines)-1]
+		}
+
+		// Write the cleaned header lines
+		for _, headerLine := range headerLines {
+			if _, err := writer.WriteString(headerLine + "\n"); err != nil {
+				return fmt.Errorf("failed to write header: %w", err)
+			}
+		}
+
+		// Add single separator line if we have original header content
+		if len(headerLines) > 0 {
+			if _, err := writer.WriteString("\n"); err != nil {
+				return err
+			}
+		}
+
+		// Write categories with cleaner spacing
+		for i, category := range hf.Categories {
+			if len(category.Entries) == 0 {
+				continue
+			}
+
+			// Add separator between categories (but not before first)
+			if i > 0 {
+				if _, err := writer.WriteString("\n"); err != nil {
+					return fmt.Errorf("failed to write category separator: %w", err)
+				}
+			}
+
+			categoryHeader := fmt.Sprintf("# @category %s", category.Name)
+			if category.Description != "" {
+				categoryHeader += " " + category.Description
+			}
+			if _, err := writer.WriteString(categoryHeader + "\n"); err != nil {
+				return fmt.Errorf("failed to write category header: %w", err)
+			}
+
+			sectionHeader := fmt.Sprintf("# =============== %s ===============", strings.ToUpper(category.Name))
+			if _, err := writer.WriteString(sectionHeader + "\n"); err != nil {
+				return fmt.Errorf("failed to write section header: %w", err)
+			}
+
+			for _, entry := range category.Entries {
+				line := formatEntry(entry)
+				if _, err := writer.WriteString(line + "\n"); err != nil {
+					return fmt.Errorf("failed to write entry: %w", err)
+				}
+			}
+		}
+
+		// Write footer with spacing if needed
+		if len(hf.Footer) > 0 {
+			if _, err := writer.WriteString("\n"); err != nil {
+				return err
+			}
+			for _, footerLine := range hf.Footer {
+				if _, err := writer.WriteString(footerLine + "\n"); err != nil {
+					return fmt.Errorf("failed to write footer: %w", err)
+				}
+			}
+		}
 
 		hf.Modified = time.Now()
 		return nil
