@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 1.0.0 (2025-09-28)
+
+### 🚀 Features
+
+* advanced security hardening and post-audit improvements ([b1a9372](https://github.com/brandonhon/hosts-manager/commit/b1a9372b1527797c9eda1dc6bab4e03db723377c))
+* complete rewrite of hosts manager in Go ([ba88a49](https://github.com/brandonhon/hosts-manager/commit/ba88a4900fd546fe5e0189e748cd402976d1d844))
+* comprehensive security hardening and vulnerability fixes ([b1148f9](https://github.com/brandonhon/hosts-manager/commit/b1148f98872133882413e978122893c4cf653d5b))
+* comprehensive TUI improvements and file formatting fixes ([2e6056c](https://github.com/brandonhon/hosts-manager/commit/2e6056c03b40b9ec2d5234970c15de9fe25650f2))
+* enhance security analysis and fix all linting issues ([ce0ee9f](https://github.com/brandonhon/hosts-manager/commit/ce0ee9ff0fade93b8ce7c02410e1c3dac66d4539))
+* finalize security hardening framework ([d386dfa](https://github.com/brandonhon/hosts-manager/commit/d386dfa1faacfe66bb24c12714c0239b4c167dc5))
+* implement comprehensive release workflow with semantic versioning ([a136d82](https://github.com/brandonhon/hosts-manager/commit/a136d82603ced7ef7b87fdc52ff30244f4a31fb7))
+
+### 🐛 Bug Fixes
+
+* add missing article in CLI description ([5f85b69](https://github.com/brandonhon/hosts-manager/commit/5f85b697b248d868e83a73e4b23645b19453397f))
+* eliminate excessive whitespace in hosts file output ([5a590fc](https://github.com/brandonhon/hosts-manager/commit/5a590fc61e2a29aeed88d47f6949c0c379e39737))
+* resolve all linting errors and enhance Makefile targets ([29ad1b0](https://github.com/brandonhon/hosts-manager/commit/29ad1b0dec629600f0966d364b5caef0782bac72))
+* resolve GitHub Actions Go version compatibility and configure pre-1.0 releases ([af9db6a](https://github.com/brandonhon/hosts-manager/commit/af9db6a1bb27a7d5e7bb64a4b58d8f8115e2fe7b))
+* resolve import cycle and build issues ([2188ffc](https://github.com/brandonhon/hosts-manager/commit/2188ffc4d628e058ae131b93c1cbaf3f678ee033))
+* resolve linting errors and deprecated API usage ([2b563af](https://github.com/brandonhon/hosts-manager/commit/2b563afc1eb195bd6aa0687e9428f407e5a64436))
+* resolve workflow failures and improve CI configuration ([75d6401](https://github.com/brandonhon/hosts-manager/commit/75d64018f8d95b2ace515423e9766ae9afd0948f))
+* simplify semantic-release configuration and resolve workflow issues ([8a57008](https://github.com/brandonhon/hosts-manager/commit/8a570089d6e7a90ae208f281899493e7140d64ef))
+* update .gitignore to include cmd directory ([1460e01](https://github.com/brandonhon/hosts-manager/commit/1460e017b1652505ef0077eb8a3f3fa04f3c9718))
+
 ## [Unreleased]
 
 ### 🚀 Features
