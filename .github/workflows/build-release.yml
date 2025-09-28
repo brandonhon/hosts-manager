@@ -1,0 +1,101 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  GO_VERSION: 'stable'
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Set version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION=${{ github.event.release.tag_name }}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build release binaries
+        run: VERSION=${{ env.VERSION }} make release
+
+      - name: Create distribution packages
+        run: VERSION=${{ env.VERSION }} make dist
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          body: |
+            ## Release ${{ env.VERSION }}
+            
+            Cross-platform binaries for hosts-manager.
+            
+            ### Installation
+            
+            **Linux/macOS:**
+            ```bash
+            curl -L -o hosts-manager.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/hosts-manager-${{ env.VERSION }}-linux-amd64.tar.gz
+            tar -xzf hosts-manager.tar.gz
+            sudo mv hosts-manager-linux-amd64 /usr/local/bin/hosts-manager
+            chmod +x /usr/local/bin/hosts-manager
+            ```
+            
+            **Windows:**
+            Download the `.zip` file and add the extracted binary to your PATH.
+            
+            ### Checksums
+            ```
+            $(cat dist/checksums.txt)
+            ```
+
+      - name: Upload build artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosts-manager-${{ env.VERSION }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
