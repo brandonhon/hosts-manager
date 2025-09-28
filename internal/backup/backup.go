@@ -59,7 +59,7 @@ func (m *Manager) CreateBackup() (string, error) {
 		return "", fmt.Errorf("failed to create backup: %w", err)
 	}
 
-	m.cleanupOldBackups()
+	_ = m.cleanupOldBackups()
 
 	return backupPath, nil
 }
@@ -69,17 +69,17 @@ func (m *Manager) copyFile(src, dst string, compress bool) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	if compress {
 		gzipWriter := gzip.NewWriter(dstFile)
-		defer gzipWriter.Close()
+		defer func() { _ = gzipWriter.Close() }()
 		_, err = io.Copy(gzipWriter, srcFile)
 	} else {
 		_, err = io.Copy(dstFile, srcFile)
@@ -115,7 +115,7 @@ func (m *Manager) restoreFile(src, dst string, decompress bool) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	// Get the original destination file permissions to preserve them
 	var fileMode os.FileMode = 0644 // Default fallback
@@ -127,7 +127,7 @@ func (m *Manager) restoreFile(src, dst string, decompress bool) error {
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	var reader io.Reader = srcFile
 	if decompress {
@@ -135,7 +135,7 @@ func (m *Manager) restoreFile(src, dst string, decompress bool) error {
 		if err != nil {
 			return err
 		}
-		defer gzipReader.Close()
+		defer func() { _ = gzipReader.Close() }()
 		reader = gzipReader
 	}
 
@@ -209,7 +209,7 @@ func (m *Manager) calculateFileHash(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var reader io.Reader = file
 	if strings.HasSuffix(filePath, ".gz") {
@@ -217,7 +217,7 @@ func (m *Manager) calculateFileHash(filePath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		defer gzipReader.Close()
+		defer func() { _ = gzipReader.Close() }()
 		reader = gzipReader
 	}
 
@@ -305,7 +305,7 @@ func (m *Manager) secureDelete(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file for secure deletion: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Overwrite with zeros (single pass is sufficient for most cases)
 	zeroBuffer := make([]byte, min(4096, int(fileSize))) // 4KB chunks
@@ -326,7 +326,7 @@ func (m *Manager) secureDelete(filePath string) error {
 	}
 
 	// Close before removing
-	file.Close()
+	_ = file.Close()
 
 	// Now remove the file
 	if err := os.Remove(filePath); err != nil {
@@ -377,7 +377,7 @@ func (m *Manager) CreateSecureBackup() (string, error) {
 	// Verify the backup integrity immediately after creation
 	if err := m.VerifyBackupIntegrity(backupPath); err != nil {
 		// If verification fails, securely delete the bad backup
-		m.secureDelete(backupPath)
+		_ = m.secureDelete(backupPath)
 		return "", fmt.Errorf("backup verification failed: %w", err)
 	}
 

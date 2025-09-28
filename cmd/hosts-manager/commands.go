@@ -683,9 +683,7 @@ func isValidEditor(editor string) bool {
 	baseName := filepath.Base(editorCmd)
 
 	// Remove .exe extension on Windows
-	if strings.HasSuffix(baseName, ".exe") {
-		baseName = strings.TrimSuffix(baseName, ".exe")
-	}
+	baseName = strings.TrimSuffix(baseName, ".exe")
 
 	return allowedEditors[baseName]
 }

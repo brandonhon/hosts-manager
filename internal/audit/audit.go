@@ -136,7 +136,11 @@ func (l *Logger) Log(event AuditEvent) error {
 	if err != nil {
 		return fmt.Errorf("failed to open audit log: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close audit log file: %v\n", err)
+		}
+	}()
 
 	// Write event with newline
 	if _, err := file.WriteString(string(eventJSON) + "\n"); err != nil {
@@ -338,7 +342,11 @@ func (l *Logger) GetRecentEvents(limit int) ([]AuditEvent, error) {
 		}
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close audit log file: %v\n", err)
+		}
+	}()
 
 	var events []AuditEvent
 	decoder := json.NewDecoder(file)
@@ -433,7 +441,11 @@ func (l *Logger) compressLog(logPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open log for compression: %w", err)
 	}
-	defer originalFile.Close()
+	defer func() {
+		if err := originalFile.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close original file: %v\n", err)
+		}
+	}()
 
 	// Create compressed file
 	compressedPath := logPath + ".gz"
@@ -441,14 +453,22 @@ func (l *Logger) compressLog(logPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create compressed log: %w", err)
 	}
-	defer compressedFile.Close()
+	defer func() {
+		if err := compressedFile.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close compressed file: %v\n", err)
+		}
+	}()
 
 	// Create gzip writer with optimized compression settings
 	gzipWriter, err := gzip.NewWriterLevel(compressedFile, gzip.BestSpeed)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip writer: %w", err)
 	}
-	defer gzipWriter.Close()
+	defer func() {
+		if err := gzipWriter.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close gzip writer: %v\n", err)
+		}
+	}()
 
 	// Stream the file in chunks to avoid loading entire file in memory
 	const bufferSize = 64 * 1024 // 64KB chunks

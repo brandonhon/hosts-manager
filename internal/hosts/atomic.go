@@ -55,15 +55,15 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	// Write PID and timestamp to lock file for debugging and stale detection
 	lockInfo := fmt.Sprintf("%d\n%s\n", os.Getpid(), time.Now().Format(time.RFC3339))
 	if _, err := lockFile.WriteString(lockInfo); err != nil {
-		lockFile.Close()
-		os.Remove(lockPath)
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to write lock info to lock file: %w", err)
 	}
 
 	// Acquire exclusive lock
 	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		lockFile.Close()
-		os.Remove(lockPath)
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to acquire file lock: %w", err)
 	}
 
@@ -76,19 +76,19 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	// Create secure temporary file using os.CreateTemp in the same directory
 	tempFile, err := os.CreateTemp(dir, "."+filepath.Base(targetPath)+".tmp.*")
 	if err != nil {
-		syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		lockFile.Close()
-		os.Remove(lockPath)
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to create temporary file: %w", err)
 	}
 
 	// Set appropriate permissions on the temporary file
 	if err := tempFile.Chmod(fileMode); err != nil {
-		tempFile.Close()
-		os.Remove(tempFile.Name())
-		syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		lockFile.Close()
-		os.Remove(lockPath)
+		_ = tempFile.Close()
+		_ = os.Remove(tempFile.Name())
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to set permissions on temporary file: %w", err)
 	}
 
@@ -162,7 +162,7 @@ func (aw *AtomicFileWriter) Close() error {
 
 	// Release file lock and close lock file
 	if aw.lockFile != nil {
-		syscall.Flock(int(aw.lockFile.Fd()), syscall.LOCK_UN)
+		_ = syscall.Flock(int(aw.lockFile.Fd()), syscall.LOCK_UN)
 		if err := aw.lockFile.Close(); err != nil {
 			lastErr = err
 		}
@@ -184,7 +184,7 @@ func AtomicWrite(targetPath string, writeFunc func(io.Writer) error) error {
 	if err != nil {
 		return err
 	}
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Write data using the provided function
 	if err := writeFunc(writer); err != nil {
@@ -219,13 +219,13 @@ func SafeRead(filePath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Acquire shared lock
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
 		return nil, fmt.Errorf("failed to acquire shared lock: %w", err)
 	}
-	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
 
 	// Read the file
 	data, err := io.ReadAll(file)
