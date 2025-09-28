@@ -1,6 +1,8 @@
 module hosts-manager
 
-go 1.24.4
+go 1.24.0
+
+toolchain go1.24.6
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
