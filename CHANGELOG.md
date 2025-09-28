@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1](https://github.com/brandonhon/hosts-manager/compare/v1.0.0...v1.0.1) (2025-09-28)
+
+### 🚀 Features
+
+* add manual build and release workflow ([23d59a9](https://github.com/brandonhon/hosts-manager/commit/23d59a9d23e81d6eb0d4b4d19161f9dda3bc08a9))
+
+### 📚 Documentation
+
+* clarify development status and versioning approach ([8511672](https://github.com/brandonhon/hosts-manager/commit/85116728545d33f6f1175ac1d259df781daae6e8))
+
 ## 1.0.0 (2025-09-28)
 
 ### 🚀 Features
