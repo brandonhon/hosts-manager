@@ -564,6 +564,12 @@ For detailed release notes and version history, see [CHANGELOG.md](CHANGELOG.md)
 
 See the [latest release](https://github.com/brandonhon/hosts-manager/releases/latest) for current version information and download links.
 
+### Development Status
+
+⚠️ **Note**: Despite the version number, this project is under active development. The v1.0.0 release represents a working implementation with comprehensive features, but the API and behavior may still evolve. Consider this a development release suitable for testing and feedback.
+
+Future releases will follow semantic versioning with patch releases (1.0.1, 1.0.2, etc.) for ongoing improvements and minor releases (1.1.0, 1.2.0, etc.) for new features until the API is considered stable.
+
 ## Support
 
 - Create an issue on GitHub for bugs and feature requests
