@@ -30,7 +30,7 @@ func (p *Parser) Parse() (*HostsFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open hosts file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -179,7 +179,7 @@ func (p *Parser) isValidIP(ip string) bool {
 func (hf *HostsFile) Write(filePath string) error {
 	return AtomicWrite(filePath, func(file io.Writer) error {
 		writer := bufio.NewWriter(file)
-		defer writer.Flush()
+		defer func() { _ = writer.Flush() }()
 
 		// Write managed file header
 		managedHeader := []string{

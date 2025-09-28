@@ -61,7 +61,6 @@ func SanitizeErrorMessage(message string) string {
 	return message
 }
 
-
 // sanitizeFilePaths removes full paths and keeps only relevant filenames using simple string operations
 func sanitizeFilePaths(message string) string {
 	// Use simple string replacements instead of complex regex to avoid DoS

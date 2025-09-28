@@ -281,9 +281,7 @@ func isValidEditor(editor string) bool {
 	}
 
 	baseName := strings.ToLower(parts[0])
-	if strings.HasSuffix(baseName, ".exe") {
-		baseName = strings.TrimSuffix(baseName, ".exe")
-	}
+	baseName = strings.TrimSuffix(baseName, ".exe")
 
 	return allowedEditors[baseName]
 }

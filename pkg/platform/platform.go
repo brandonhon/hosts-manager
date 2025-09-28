@@ -46,7 +46,7 @@ func (p *Platform) HasWritePermission() bool {
 	if err != nil {
 		return false
 	}
-	file.Close()
+	_ = file.Close()
 	return true
 }
 
@@ -62,7 +62,7 @@ func (p *Platform) ElevateIfNeeded() error {
 
 	switch runtime.GOOS {
 	case "windows":
-		return fmt.Errorf("Administrator privileges required to modify hosts file. Please run this command in an elevated Command Prompt or PowerShell")
+		return fmt.Errorf("administrator privileges required to modify hosts file. Please run this command in an elevated Command Prompt or PowerShell")
 	case "darwin", "linux":
 		return fmt.Errorf("root privileges required to modify hosts file. Please run: sudo %s", strings.Join(os.Args, " "))
 	default:
@@ -77,7 +77,7 @@ func (p *Platform) ElevateIfNeededStrict() error {
 	if !p.IsElevated() {
 		switch runtime.GOOS {
 		case "windows":
-			return fmt.Errorf("Administrator privileges required for this security-sensitive operation. Please run this command in an elevated Command Prompt or PowerShell")
+			return fmt.Errorf("administrator privileges required for this security-sensitive operation. Please run this command in an elevated Command Prompt or PowerShell")
 		case "darwin", "linux":
 			return fmt.Errorf("root privileges required for this security-sensitive operation. Please run: sudo %s", strings.Join(os.Args, " "))
 		default:
