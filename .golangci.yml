@@ -14,12 +14,12 @@ linters:
     - goimports
     - misspell
     - unconvert
-    - goconst
     - gocyclo
 
   disable:
     - gosec # Run separately in security workflow
     - errcheck # Temporarily disabled due to intentional error ignoring in audit logging
+    - goconst # Temporarily disabled - strings used in limited contexts don't need constants
 
 linters-settings:
   errcheck:
