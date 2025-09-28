@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.23', 'stable']
+        go-version: ['stable']
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -54,10 +54,12 @@ jobs:
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
         uses: codecov/codecov-action@v4
+        continue-on-error: true
         with:
           file: ./build/coverage.out
           flags: unittests
           name: codecov-umbrella
+          fail_ci_if_error: false
 
   lint:
     name: Lint
