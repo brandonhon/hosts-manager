@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.6](https://github.com/brandonhon/hosts-manager/compare/v1.0.5...v1.0.6) (2025-09-28)
+
+### 🐛 Bug Fixes
+
+* disable goconst linter to resolve workflow failures ([8e302a7](https://github.com/brandonhon/hosts-manager/commit/8e302a766b3d7277c94885670ed8d767b7b11873))
+
 ## [1.0.5](https://github.com/brandonhon/hosts-manager/compare/v1.0.4...v1.0.5) (2025-09-28)
 
 ### 🐛 Bug Fixes
