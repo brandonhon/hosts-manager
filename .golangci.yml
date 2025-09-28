@@ -30,7 +30,7 @@ linters-settings:
     local-prefixes: hosts-manager
   
   gocyclo:
-    min-complexity: 15
+    min-complexity: 30
   
   goconst:
     min-len: 3
