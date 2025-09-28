@@ -1,5 +1,10 @@
 # Hosts Manager
 
+[![Release](https://img.shields.io/github/v/release/brandonhon/hosts-manager)](https://github.com/brandonhon/hosts-manager/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/brandonhon/hosts-manager/ci.yml?branch=main)](https://github.com/brandonhon/hosts-manager/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/brandonhon/hosts-manager)](https://goreportcard.com/report/github.com/brandonhon/hosts-manager)
+[![License](https://img.shields.io/github/license/brandonhon/hosts-manager)](LICENSE)
+
 A powerful, cross-platform CLI hosts file manager with template system, backup/restore, interactive TUI, and advanced search capabilities.
 
 ## Features
@@ -23,18 +28,34 @@ A powerful, cross-platform CLI hosts file manager with template system, backup/r
 
 ## Installation
 
+### Pre-built Binaries (Recommended)
+
+Download the latest release from the [releases page](https://github.com/brandonhon/hosts-manager/releases).
+
+#### Linux/macOS
+```bash
+# Download and install (replace with latest version)
+curl -L -o hosts-manager.tar.gz https://github.com/brandonhon/hosts-manager/releases/latest/download/hosts-manager-linux-amd64.tar.gz
+tar -xzf hosts-manager.tar.gz
+sudo mv hosts-manager-linux-amd64 /usr/local/bin/hosts-manager
+chmod +x /usr/local/bin/hosts-manager
+```
+
+#### Windows
+Download the `.zip` file from the releases page and add the extracted binary to your PATH.
+
 ### From Source
 
 ```bash
-git clone https://github.com/your-username/hosts-manager.git
+git clone https://github.com/brandonhon/hosts-manager.git
 cd hosts-manager
 make build
 sudo make install
 ```
 
-### Pre-built Binaries
+### Package Managers
 
-Download the latest release from the [releases page](https://github.com/your-username/hosts-manager/releases).
+Coming soon: Homebrew, Chocolatey, and Snap packages.
 
 ## Quick Start
 
@@ -578,16 +599,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
   - DoS prevention in error sanitization with simplified patterns
   - Secure temporary file creation using `os.CreateTemp()` API
 
-### v1.0.0 (2023-12-07)
-- Initial release
-- Cross-platform hosts file management
-- Interactive TUI mode
-- Template system with categories
-- Backup and restore functionality
-- Export/import capabilities
-- Fuzzy search
-- Profile system
-- Configuration management
+For detailed release notes and version history, see [CHANGELOG.md](CHANGELOG.md).
+
+### Latest Release
+See the [latest release](https://github.com/brandonhon/hosts-manager/releases/latest) for current version information and download links.
 
 ## Support
 

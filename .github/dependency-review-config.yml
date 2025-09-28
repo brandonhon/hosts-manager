@@ -1,0 +1,30 @@
+# Dependency Review Configuration
+# This file controls the behavior of the dependency review action
+
+# Vulnerability check settings
+vulnerability-check: true
+license-check: true
+
+# Severity levels that will fail the check
+fail-on-severity: 'critical'
+
+# License types to allow/deny
+allow-licenses:
+  - 'MIT'
+  - 'Apache-2.0'
+  - 'BSD-2-Clause'
+  - 'BSD-3-Clause'
+  - 'ISC'
+  - 'GPL-3.0'
+  - 'MPL-2.0'
+
+deny-licenses:
+  - 'GPL-2.0'
+  - 'AGPL-1.0'
+  - 'AGPL-3.0'
+
+# Package advisories to ignore (if needed)
+allow-ghsas: []
+
+# Comment configuration
+comment-summary-in-pr: true
