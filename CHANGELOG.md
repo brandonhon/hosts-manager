@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.2](https://github.com/brandonhon/hosts-manager/compare/v1.0.1...v1.0.2) (2025-09-28)
+
+### 🐛 Bug Fixes
+
+* simplify CI workflow and improve reliability ([651732c](https://github.com/brandonhon/hosts-manager/commit/651732c57200a2eab60ad84968076df4910bdd50))
+
 ## [1.0.1](https://github.com/brandonhon/hosts-manager/compare/v1.0.0...v1.0.1) (2025-09-28)
 
 ### 🚀 Features
