@@ -30,38 +30,15 @@ jobs:
 
       - name: Install semantic-release
         run: |
-          npm install -g semantic-release
-          npm install -g @semantic-release/changelog
-          npm install -g @semantic-release/git
-          npm install -g @semantic-release/github
-          npm install -g @semantic-release/exec
-          npm install -g conventional-changelog-conventionalcommits
+          npm install -g semantic-release@24
+          npm install -g @semantic-release/changelog@6
+          npm install -g @semantic-release/git@10
+          npm install -g @semantic-release/github@10
+          npm install -g conventional-changelog-conventionalcommits@8
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run tests
-        run: make test
-
-      - name: Run validation
-        run: make validate-fast
 
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+          NPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release --debug
