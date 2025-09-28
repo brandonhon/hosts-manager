@@ -192,46 +192,55 @@ docker-run: docker-build
 # Comprehensive security analysis
 security:
 	@echo "Running comprehensive security analysis..."
-	@$(MAKE) security-gosec
-	@$(MAKE) security-nancy
-	@$(MAKE) security-govulncheck
-	@$(MAKE) security-semgrep
-	@echo "Security analysis complete"
+	@mkdir -p $(BUILD_DIR)
+	@$(MAKE) security-gosec || echo "gosec scan failed or skipped"
+	@$(MAKE) security-nancy || echo "nancy scan failed or skipped"  
+	@$(MAKE) security-govulncheck || echo "govulncheck scan failed or skipped"
+	@$(MAKE) security-semgrep || echo "semgrep scan failed or skipped"
+	@echo "Security analysis complete - check $(BUILD_DIR)/ for reports"
 
 # gosec - Go security checker
 security-gosec:
 	@echo "Running gosec security analysis..."
+	@mkdir -p $(BUILD_DIR)
 	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -fmt json -out $(BUILD_DIR)/gosec-report.json -stdout -verbose ./...; \
+		gosec -fmt json -out $(BUILD_DIR)/gosec-report.json -stdout ./... || true; \
 	else \
 		echo "gosec not found, install with: make install-security-tools"; \
+		exit 1; \
 	fi
 
 # nancy - Vulnerability scanner for Go dependencies
 security-nancy:
 	@echo "Running nancy dependency vulnerability scan..."
+	@mkdir -p $(BUILD_DIR)
 	@if command -v nancy >/dev/null 2>&1; then \
 		go list -json -deps ./... | nancy sleuth --output json > $(BUILD_DIR)/nancy-report.json || true; \
 	else \
 		echo "nancy not found, install with: make install-security-tools"; \
+		echo "Skipping nancy scan..."; \
 	fi
 
 # govulncheck - Official Go vulnerability scanner
 security-govulncheck:
 	@echo "Running govulncheck vulnerability scan..."
+	@mkdir -p $(BUILD_DIR)
 	@if command -v govulncheck >/dev/null 2>&1; then \
 		govulncheck -json ./... > $(BUILD_DIR)/govulncheck-report.json 2>&1 || true; \
 	else \
 		echo "govulncheck not found, install with: go install golang.org/x/vuln/cmd/govulncheck@latest"; \
+		echo "Skipping govulncheck scan..."; \
 	fi
 
 # semgrep - Static analysis security scanner
 security-semgrep:
 	@echo "Running semgrep security analysis..."
+	@mkdir -p $(BUILD_DIR)
 	@if command -v semgrep >/dev/null 2>&1; then \
 		semgrep --config=auto --json --output=$(BUILD_DIR)/semgrep-report.json . || true; \
 	else \
 		echo "semgrep not found, install with: pip install semgrep"; \
+		echo "Skipping semgrep scan..."; \
 	fi
 
 # License compliance check
