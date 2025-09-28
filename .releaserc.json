@@ -1,0 +1,85 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" },
+          { "type": "perf", "release": "patch" },
+          { "type": "refactor", "release": "patch" },
+          { "type": "docs", "release": false },
+          { "type": "test", "release": false },
+          { "type": "ci", "release": false },
+          { "type": "chore", "release": false },
+          { "scope": "no-release", "release": false },
+          { "breaking": true, "release": "major" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "🚀 Features" },
+            { "type": "fix", "section": "🐛 Bug Fixes" },
+            { "type": "perf", "section": "⚡ Performance Improvements" },
+            { "type": "refactor", "section": "♻️ Code Refactoring" },
+            { "type": "revert", "section": "⏪ Reverts" },
+            { "type": "docs", "section": "📚 Documentation", "hidden": false },
+            { "type": "style", "section": "💄 Styles", "hidden": true },
+            { "type": "chore", "section": "🧹 Miscellaneous Chores", "hidden": true },
+            { "type": "test", "section": "✅ Tests", "hidden": true },
+            { "type": "build", "section": "🛠 Build System", "hidden": true },
+            { "type": "ci", "section": "⚙️ Continuous Integration", "hidden": true }
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# Changelog\n\nAll notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines."
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "make clean && make build && make dist VERSION=${nextRelease.version}",
+        "publishCmd": "echo 'Build completed for version ${nextRelease.version}'"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "dist/*.tar.gz",
+            "label": "Binary archives"
+          },
+          {
+            "path": "dist/*.zip",
+            "label": "Windows binaries"
+          },
+          {
+            "path": "dist/checksums.txt",
+            "label": "Checksums"
+          }
+        ],
+        "addReleases": "bottom"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md", "package.json"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ]
+}

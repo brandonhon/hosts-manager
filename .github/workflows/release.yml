@@ -1,0 +1,237 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  GO_VERSION: '1.24'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: make test
+
+      - name: Run validation
+        run: make validate-fast
+
+  security:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install security tools
+        run: |
+          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run security analysis
+        run: make security-gosec
+
+      - name: Run vulnerability check
+        run: govulncheck ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
+          COMMIT_HASH=${GITHUB_SHA::8}
+          
+          BINARY_NAME=hosts-manager
+          if [ "$GOOS" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          
+          LDFLAGS="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commitHash=${COMMIT_HASH}"
+          
+          mkdir -p dist
+          go build -ldflags "${LDFLAGS}" -trimpath -o "dist/${BINARY_NAME}-${GOOS}-${GOARCH}" ./cmd/hosts-manager
+          
+          # Create archive
+          cd dist
+          if [ "$GOOS" = "windows" ]; then
+            zip "${BINARY_NAME}-${VERSION}-${GOOS}-${GOARCH}.zip" "${BINARY_NAME}-${GOOS}-${GOARCH}"
+          else
+            tar -czf "${BINARY_NAME}-${VERSION}-${GOOS}-${GOARCH}.tar.gz" "${BINARY_NAME}-${GOOS}-${GOARCH}"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosts-manager-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git tag --sort=-version:refname | head -n 2 | tail -n 1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          
+          # Generate changelog between tags
+          echo "## What's Changed" > changelog.md
+          echo "" >> changelog.md
+          
+          # Get commits since last tag
+          git log --pretty=format:"* %s" "${PREV_TAG}..HEAD" | grep -E "^(feat|fix|perf|refactor):" | sed 's/^/- /' >> changelog.md || true
+          
+          # Add breaking changes if any
+          BREAKING_CHANGES=$(git log --pretty=format:"%s%n%b" "${PREV_TAG}..HEAD" | grep -i "BREAKING CHANGE" || true)
+          if [ ! -z "$BREAKING_CHANGES" ]; then
+            echo "" >> changelog.md
+            echo "### ⚠️ Breaking Changes" >> changelog.md
+            echo "$BREAKING_CHANGES" | sed 's/^/- /' >> changelog.md
+          fi
+          
+          # Add contributors
+          echo "" >> changelog.md
+          echo "### Contributors" >> changelog.md
+          git log --pretty=format:"- @%an" "${PREV_TAG}..HEAD" | sort -u >> changelog.md
+          
+          # Set output for use in release
+          {
+            echo 'CHANGELOG<<EOF'
+            cat changelog.md
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Create checksums
+        run: |
+          cd dist
+          for file in *.tar.gz *.zip; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" >> checksums.txt
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            # Hosts Manager ${{ github.ref_name }}
+            
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ## Installation
+            
+            ### Linux/macOS
+            ```bash
+            # Download and extract
+            curl -L -o hosts-manager.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/hosts-manager-${{ github.ref_name }}-linux-amd64.tar.gz
+            tar -xzf hosts-manager.tar.gz
+            sudo mv hosts-manager-linux-amd64 /usr/local/bin/hosts-manager
+            chmod +x /usr/local/bin/hosts-manager
+            ```
+            
+            ### Windows
+            ```powershell
+            # Download from releases page and add to PATH
+            ```
+            
+            ## Checksums
+            ```
+            $(cat dist/checksums.txt)
+            ```
+            
+            ---
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ github.ref_name }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          draft: false
+          prerelease: false
