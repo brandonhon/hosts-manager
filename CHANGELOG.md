@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.5](https://github.com/brandonhon/hosts-manager/compare/v1.0.4...v1.0.5) (2025-09-28)
+
+### 🐛 Bug Fixes
+
+* disable problematic linters and make workflows more resilient ([e87c8de](https://github.com/brandonhon/hosts-manager/commit/e87c8def419b1562aba1012ac3d0a93be8e8c1c2))
+
 ## [1.0.4](https://github.com/brandonhon/hosts-manager/compare/v1.0.3...v1.0.4) (2025-09-28)
 
 ### 🐛 Bug Fixes
