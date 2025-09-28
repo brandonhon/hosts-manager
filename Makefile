@@ -160,6 +160,13 @@ dist: release
 			tar -czf $$binary.tar.gz $$binary; \
 		fi; \
 	done
+	@echo "Generating checksums..."
+	@cd $(DIST_DIR) && \
+	for file in *.tar.gz *.zip; do \
+		if [ -f "$$file" ]; then \
+			sha256sum "$$file" >> checksums.txt; \
+		fi; \
+	done
 	@echo "Distribution packages created in $(DIST_DIR)/"
 
 # Run the application
