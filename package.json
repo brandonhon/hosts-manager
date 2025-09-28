@@ -1,0 +1,25 @@
+{
+  "name": "hosts-manager",
+  "version": "0.1.0",
+  "description": "A powerful, cross-platform CLI hosts file manager with template system, backup/restore, interactive TUI, and advanced search capabilities.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brandonhon/hosts-manager.git"
+  },
+  "keywords": [
+    "hosts",
+    "cli",
+    "cross-platform",
+    "go",
+    "tui",
+    "backup",
+    "template"
+  ],
+  "author": "Brandon H",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/brandonhon/hosts-manager/issues"
+  },
+  "homepage": "https://github.com/brandonhon/hosts-manager#readme",
+  "private": true
+}
