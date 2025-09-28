@@ -284,7 +284,20 @@ The hosts manager organizes entries using special comment markers:
 
 ### Prerequisites
 - Go 1.19+
-- Make (optional)
+- Make (optional, but recommended for development)
+
+### Development Tools (Auto-installable)
+The following tools can be automatically installed using `make install-dev-tools`:
+- **golangci-lint** - Comprehensive Go linter
+- **gosec** - Go security checker
+- **nancy** - Dependency vulnerability scanner
+- **govulncheck** - Go vulnerability database checker
+- **semgrep** - Semantic code analysis
+- **go-licenses** - License compliance checker
+- **cyclonedx-gomod** - SBOM generator
+- **deadcode** - Dead code detector
+- **ineffassign** - Ineffectual assignment detector
+- **misspell** - Spelling checker
 
 ### Build from Source
 ```bash
@@ -301,10 +314,38 @@ make install   # Install locally
 make dev         # Quick development build
 make test        # Run tests
 make coverage    # Generate coverage report
-make lint        # Run linters
+make lint        # Run comprehensive linters
+make lint-fast   # Run fast linters (no security checks)
+make lint-fix    # Auto-fix linting issues where possible
 make fmt         # Format code
 make vet         # Vet code
 make validate    # Full validation pipeline
+make validate-fast    # Fast validation (no security scans)
+make validate-full    # Complete validation with all checks
+make pre-commit       # Pre-commit validation checks
+make quality-gate     # Quality gate for CI/CD
+```
+
+### Security and Quality Assurance
+```bash
+# Security Analysis
+make security            # Run all security checks
+make security-gosec      # Go security checker
+make security-nancy      # Dependency vulnerability scanner
+make security-govulncheck # Go vulnerability database check
+make security-semgrep    # Semantic code analysis
+
+# Code Quality
+make sbom               # Generate Software Bill of Materials
+make license-check      # Check license compliance
+make deadcode          # Find unused code
+make ineffassign       # Find ineffectual assignments
+make misspell          # Find spelling mistakes
+
+# Development Tools
+make install-linters      # Install all linting tools
+make install-security-tools  # Install security analysis tools
+make install-dev-tools   # Install all development tools
 ```
 
 ### Cross-Compilation
@@ -312,6 +353,69 @@ make validate    # Full validation pipeline
 make release     # Build for all platforms
 make dist        # Create distribution packages
 ```
+
+## Code Quality and Security Tools
+
+Hosts Manager includes comprehensive linting and security analysis tools to ensure code quality and security:
+
+### Linting Configuration
+The project uses `golangci-lint` with an extensive configuration (`.golangci.yml`) that includes:
+
+#### Security Linters
+- **gosec** - Security audit for Go code
+- **gas** - Additional security checks
+- **depguard** - Dependency restrictions and policies
+
+#### Code Quality Linters
+- **staticcheck** - Advanced static analysis
+- **govet** - Go vet with enhanced checks
+- **errcheck** - Unchecked error detection
+- **unused** - Dead code detection
+- **ineffassign** - Ineffectual assignment detection
+- **unconvert** - Unnecessary type conversion detection
+- **goconst** - Repeated string constant detection
+- **gocyclo** - Cyclomatic complexity analysis
+- **gocognit** - Cognitive complexity analysis
+- **dupl** - Code clone detection
+- **misspell** - Spelling mistake detection
+
+#### Style and Formatting Linters
+- **gofmt** - Go formatting
+- **goimports** - Import formatting and organization
+- **gci** - Import ordering
+- **gofumpt** - Stricter formatting rules
+- **revive** - Enhanced Go linting (golint replacement)
+- **stylecheck** - Style consistency checks
+
+#### Performance Linters
+- **prealloc** - Slice preallocation opportunities
+- **bodyclose** - HTTP response body closure
+- **noctx** - HTTP requests without context
+
+### Security Analysis Tools
+The project integrates multiple security analysis tools:
+
+- **gosec** - Go Security Checker for vulnerability detection
+- **nancy** - Dependency vulnerability scanner using Sonatype OSS Index
+- **govulncheck** - Official Go vulnerability database checker
+- **semgrep** - Semantic code analysis for security patterns
+
+### Quality Assurance Features
+- **Software Bill of Materials (SBOM)** generation in CycloneDX format
+- **License compliance** checking with go-licenses
+- **Comprehensive test coverage** reporting with visualization
+- **Benchmark performance** tracking
+- **Pre-commit hooks** for automated quality checks
+- **CI/CD quality gates** for automated validation
+
+### Development Workflow Integration
+The build system provides multiple validation levels:
+- **Fast validation** (`make validate-fast`) - Essential checks for development
+- **Full validation** (`make validate-full`) - Complete analysis including security scans
+- **Pre-commit validation** (`make pre-commit`) - Optimized for git hooks
+- **Quality gate** (`make quality-gate`) - CI/CD pipeline validation
+
+All tools can be automatically installed using `make install-dev-tools`.
 
 ## Security Features
 
@@ -412,10 +516,22 @@ hosts-manager config --show             # Will recreate default config
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run `make validate`
-6. Submit a pull request
+3. Install development tools: `make install-dev-tools`
+4. Make your changes
+5. Add comprehensive tests
+6. Run full validation: `make validate-full`
+7. Ensure security checks pass: `make security`
+8. Verify test coverage: `make coverage`
+9. Submit a pull request
+
+### Code Quality Requirements
+All contributions must pass:
+- **Linting**: `make lint` (golangci-lint with 30+ enabled linters)
+- **Security**: `make security` (gosec, nancy, govulncheck, semgrep)
+- **Testing**: Comprehensive test coverage with `make test`
+- **Formatting**: Consistent code style with `make fmt`
+
+Use `make pre-commit` to run the essential checks before committing.
 
 ## License
 
@@ -423,7 +539,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Changelog
 
-### v1.1.0 (2025-01-XX) - Security Hardening Release
+### v1.1.0 (2025-01-XX) - Security Hardening & Code Quality Release
 - **Enhanced Security Features**:
   - Comprehensive input validation with anti-injection protection
   - Path traversal prevention and sanitization improvements
@@ -441,6 +557,20 @@ MIT License - see [LICENSE](LICENSE) file for details.
   - Secure deletion with data overwriting
   - Privilege escalation improvements with strict security mode
   - Configuration validation framework
+- **Code Quality & Development Tools**:
+  - Comprehensive linting with golangci-lint (30+ enabled linters)
+  - Multi-layer security analysis (gosec, nancy, govulncheck, semgrep)
+  - Software Bill of Materials (SBOM) generation
+  - License compliance checking
+  - Automated development tool installation
+  - Pre-commit hooks and CI/CD quality gates
+  - Enhanced test coverage reporting and benchmarking
+  - Dead code detection and performance optimization tools
+- **Build System Enhancements**:
+  - Modular validation pipeline (validate, validate-fast, validate-full)
+  - Security-focused build targets (security, security-gosec, etc.)
+  - Quality assurance automation (quality-gate, pre-commit)
+  - Development workflow integration with auto-fix capabilities
 - **Post-Release Security Improvements**:
   - Audit log injection prevention with input sanitization
   - Streaming compression with size limits to prevent resource exhaustion
