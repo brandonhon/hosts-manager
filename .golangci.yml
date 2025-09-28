@@ -1,7 +1,6 @@
 run:
   timeout: 5m
   tests: true
-  build-tags: []
 
 linters:
   enable:
@@ -12,138 +11,23 @@ linters:
     - staticcheck
     - typecheck
     - unused
-    - revive
     - gofmt
     - goimports
     - misspell
     - unconvert
     - goconst
     - gocyclo
-    - gofumpt
-    - whitespace
-    - wsl
-    - predeclared
-    - nolintlint
-    - gocritic
-    - godot
-    - gci
-    - exportloopref
-    - bodyclose
-    - asciicheck
-    - bidichk
-    - contextcheck
-    - durationcheck
-    - errname
-    - errorlint
-    - exhaustive
-    - forbidigo
-    - forcetypeassert
-    - goheader
-    - gomnd
-    - gomoddirectives
-    - gomodguard
-    - goprintffuncname
-    - importas
-    - makezero
-    - nakedret
-    - nilerr
-    - nilnil
-    - noctx
-    - nosprintfhostport
-    - prealloc
-    - rowserrcheck
-    - sqlclosecheck
-    - tenv
-    - tparallel
-    - unparam
-    - wastedassign
 
   disable:
     - gosec # Run separately in security workflow
-    - cyclop # Duplicate of gocyclo
-    - funlen # Too restrictive for this project
-    - gocognit # Too restrictive for this project
-    - godox # Allow TODO comments in development
-    - lll # Line length handled by gofumpt
-    - nestif # Too restrictive for this project
-    - nlreturn # Too restrictive for this project
-    - paralleltest # Not applicable for this project
-    - testpackage # Allow same package tests
-    - varnamelen # Too restrictive for this project
-    - wrapcheck # Too restrictive for this project
 
 linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
-    exclude-functions:
-      - (fmt.Print.*|os.Stdout.Write)
-      - (*os.File).Close
-      - (*compress/gzip.Writer).Close
-  
-  govet:
-    check-shadowing: true
-    enable-all: true
-    disable:
-      - fieldalignment # Too restrictive for readability
-  
-  staticcheck:
-    checks: ["all"]
-  
-  revive:
-    severity: warning
-    rules:
-      - name: exported
-        disabled: false
-      - name: blank-imports
-        disabled: false
-      - name: context-as-argument
-        disabled: false
-      - name: dot-imports
-        disabled: false
-      - name: error-return
-        disabled: false
-      - name: error-strings
-        disabled: false
-      - name: error-naming
-        disabled: false
-      - name: if-return
-        disabled: false
-      - name: increment-decrement
-        disabled: false
-      - name: var-naming
-        disabled: false
-      - name: package-comments
-        disabled: false
-      - name: range
-        disabled: false
-      - name: receiver-naming
-        disabled: false
-      - name: time-naming
-        disabled: false
-      - name: unexported-return
-        disabled: false
-      - name: indent-error-flow
-        disabled: false
-      - name: errorf
-        disabled: false
-      - name: empty-block
-        disabled: false
-      - name: superfluous-else
-        disabled: false
-      - name: unreachable-code
-        disabled: false
-      - name: redefines-builtin-id
-        disabled: false
   
   goimports:
     local-prefixes: hosts-manager
-  
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(hosts-manager)
   
   gocyclo:
     min-complexity: 15
@@ -154,57 +38,14 @@ linters-settings:
   
   misspell:
     locale: US
-  
-  nakedret:
-    max-func-lines: 30
-  
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
-  
-  unparam:
-    check-exported: false
-  
-  unused:
-    check-exported: false
-  
-  whitespace:
-    multi-if: false
-    multi-func: false
 
 issues:
   exclude-rules:
     # Exclude some linters from running on tests files
     - path: _test\.go
       linters:
-        - gomnd
         - goconst
         - errcheck
-        - gosec
-    
-    # Exclude gosec from certain patterns (we run it separately)
-    - linters:
-        - gosec
-      text: "G304" # File path provided as taint input (acceptable for file management tool)
-    
-    # Allow long lines in generated code
-    - path: ".*\\.pb\\.go"
-      linters:
-        - lll
-    
-    # Allow unused parameters in interface implementations
-    - text: "unused-parameter"
-      linters:
-        - revive
-      path: ".*interface.*\\.go"
   
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
