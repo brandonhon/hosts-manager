@@ -49,29 +49,8 @@
       }
     ],
     [
-      "@semantic-release/exec",
-      {
-        "prepareCmd": "make clean && make build && make dist VERSION=${nextRelease.version}",
-        "publishCmd": "echo 'Build completed for version ${nextRelease.version}'"
-      }
-    ],
-    [
       "@semantic-release/github",
       {
-        "assets": [
-          {
-            "path": "dist/*.tar.gz",
-            "label": "Binary archives"
-          },
-          {
-            "path": "dist/*.zip",
-            "label": "Windows binaries"
-          },
-          {
-            "path": "dist/checksums.txt",
-            "label": "Checksums"
-          }
-        ],
         "addReleases": "bottom"
       }
     ],

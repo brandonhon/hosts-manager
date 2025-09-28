@@ -1,6 +1,6 @@
 {
   "name": "hosts-manager",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "A powerful, cross-platform CLI hosts file manager with template system, backup/restore, interactive TUI, and advanced search capabilities.",
   "repository": {
     "type": "git",
