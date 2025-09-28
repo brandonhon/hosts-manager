@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.4](https://github.com/brandonhon/hosts-manager/compare/v1.0.3...v1.0.4) (2025-09-28)
+
+### 🐛 Bug Fixes
+
+* resolve CI workflow linting and security scanner issues ([2a89af1](https://github.com/brandonhon/hosts-manager/commit/2a89af1290f4598c1fe824d8f22e242e0be05ab1))
+
 ## [1.0.3](https://github.com/brandonhon/hosts-manager/compare/v1.0.2...v1.0.3) (2025-09-28)
 
 ### 🐛 Bug Fixes
