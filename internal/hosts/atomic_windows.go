@@ -22,7 +22,7 @@ const (
 func platformAcquireLock(fd int) error {
 	handle := syscall.Handle(fd)
 	var overlapped syscall.Overlapped
-	
+
 	ret, _, err := procLockFileEx.Call(
 		uintptr(handle),
 		uintptr(LOCKFILE_EXCLUSIVE_LOCK|LOCKFILE_FAIL_IMMEDIATELY),
@@ -31,7 +31,7 @@ func platformAcquireLock(fd int) error {
 		uintptr(0xFFFFFFFF),
 		uintptr(unsafe.Pointer(&overlapped)),
 	)
-	
+
 	if ret == 0 {
 		return err
 	}
@@ -42,7 +42,7 @@ func platformAcquireLock(fd int) error {
 func platformReleaseLock(fd int) error {
 	handle := syscall.Handle(fd)
 	var overlapped syscall.Overlapped
-	
+
 	ret, _, err := procUnlockFileEx.Call(
 		uintptr(handle),
 		uintptr(0),
@@ -50,7 +50,7 @@ func platformReleaseLock(fd int) error {
 		uintptr(0xFFFFFFFF),
 		uintptr(unsafe.Pointer(&overlapped)),
 	)
-	
+
 	if ret == 0 {
 		return err
 	}
@@ -61,7 +61,7 @@ func platformReleaseLock(fd int) error {
 func platformAcquireSharedLock(fd int) error {
 	handle := syscall.Handle(fd)
 	var overlapped syscall.Overlapped
-	
+
 	ret, _, err := procLockFileEx.Call(
 		uintptr(handle),
 		uintptr(LOCKFILE_FAIL_IMMEDIATELY), // No exclusive flag = shared lock
@@ -70,7 +70,7 @@ func platformAcquireSharedLock(fd int) error {
 		uintptr(0xFFFFFFFF),
 		uintptr(unsafe.Pointer(&overlapped)),
 	)
-	
+
 	if ret == 0 {
 		return err
 	}
