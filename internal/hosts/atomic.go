@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -61,7 +60,7 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	}
 
 	// Acquire exclusive lock
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := platformAcquireLock(int(lockFile.Fd())); err != nil {
 		_ = lockFile.Close()
 		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to acquire file lock: %w", err)
@@ -76,7 +75,7 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	// Create secure temporary file using os.CreateTemp in the same directory
 	tempFile, err := os.CreateTemp(dir, "."+filepath.Base(targetPath)+".tmp.*")
 	if err != nil {
-		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = platformReleaseLock(int(lockFile.Fd()))
 		_ = lockFile.Close()
 		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to create temporary file: %w", err)
@@ -86,7 +85,7 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	if err := tempFile.Chmod(fileMode); err != nil {
 		_ = tempFile.Close()
 		_ = os.Remove(tempFile.Name())
-		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = platformReleaseLock(int(lockFile.Fd()))
 		_ = lockFile.Close()
 		_ = os.Remove(lockPath)
 		return nil, fmt.Errorf("failed to set permissions on temporary file: %w", err)
@@ -162,7 +161,7 @@ func (aw *AtomicFileWriter) Close() error {
 
 	// Release file lock and close lock file
 	if aw.lockFile != nil {
-		_ = syscall.Flock(int(aw.lockFile.Fd()), syscall.LOCK_UN)
+		_ = platformReleaseLock(int(aw.lockFile.Fd()))
 		if err := aw.lockFile.Close(); err != nil {
 			lastErr = err
 		}
@@ -222,10 +221,10 @@ func SafeRead(filePath string) ([]byte, error) {
 	defer func() { _ = file.Close() }()
 
 	// Acquire shared lock
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+	if err := platformAcquireSharedLock(int(file.Fd())); err != nil {
 		return nil, fmt.Errorf("failed to acquire shared lock: %w", err)
 	}
-	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = platformReleaseLock(int(file.Fd())) }()
 
 	// Read the file
 	data, err := io.ReadAll(file)
