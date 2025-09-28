@@ -560,48 +560,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Changelog
 
-### v1.1.0 (2025-01-XX) - Security Hardening & Code Quality Release
-- **Enhanced Security Features**:
-  - Comprehensive input validation with anti-injection protection
-  - Path traversal prevention and sanitization improvements
-  - Homograph attack detection for IDN spoofing prevention
-  - Secure file locking with stale lock detection and cleanup
-  - Command injection protection for editor execution
-  - Configuration schema validation with security policies
-  - Error message sanitization to prevent information disclosure
-  - Audit log rotation with compression and retention policies
-  - IPv6 link-local address policy improvements
-  - Null byte injection protection across all inputs
-- **Security Infrastructure**:
-  - New audit logging system with structured JSON format
-  - Enhanced backup integrity verification with SHA-256 hashing
-  - Secure deletion with data overwriting
-  - Privilege escalation improvements with strict security mode
-  - Configuration validation framework
-- **Code Quality & Development Tools**:
-  - Comprehensive linting with golangci-lint (30+ enabled linters)
-  - Multi-layer security analysis (gosec, nancy, govulncheck, semgrep)
-  - Software Bill of Materials (SBOM) generation
-  - License compliance checking
-  - Automated development tool installation
-  - Pre-commit hooks and CI/CD quality gates
-  - Enhanced test coverage reporting and benchmarking
-  - Dead code detection and performance optimization tools
-- **Build System Enhancements**:
-  - Modular validation pipeline (validate, validate-fast, validate-full)
-  - Security-focused build targets (security, security-gosec, etc.)
-  - Quality assurance automation (quality-gate, pre-commit)
-  - Development workflow integration with auto-fix capabilities
-- **Post-Release Security Improvements**:
-  - Audit log injection prevention with input sanitization
-  - Streaming compression with size limits to prevent resource exhaustion
-  - Race condition mitigation in fallback paths using unique identifiers
-  - DoS prevention in error sanitization with simplified patterns
-  - Secure temporary file creation using `os.CreateTemp()` API
-
 For detailed release notes and version history, see [CHANGELOG.md](CHANGELOG.md).
 
-### Latest Release
 See the [latest release](https://github.com/brandonhon/hosts-manager/releases/latest) for current version information and download links.
 
 ## Support

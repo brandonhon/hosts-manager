@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.21'
 
 jobs:
   test:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.23', '1.24']
+        go-version: ['1.21', '1.22']
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -47,12 +47,12 @@ jobs:
         run: make test
 
       - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.22'
         run: |
           make coverage
           
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.22'
         uses: codecov/codecov-action@v4
         with:
           file: ./build/coverage.out
