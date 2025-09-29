@@ -52,8 +52,7 @@
     [
       "@semantic-release/github",
       {
-        "addReleases": "bottom",
-        "releaseBodyTemplate": "## Release ${nextRelease.version}\n\nCross-platform binaries and source code for hosts-manager.\n\n### 📦 Available Downloads\n\n**Compiled Binaries (both .tar.gz and .zip formats):**\n- `hosts-manager-${nextRelease.version}-linux-amd64.{tar.gz,zip}` - Linux x64\n- `hosts-manager-${nextRelease.version}-linux-arm64.{tar.gz,zip}` - Linux ARM64\n- `hosts-manager-${nextRelease.version}-darwin-amd64.{tar.gz,zip}` - macOS Intel\n- `hosts-manager-${nextRelease.version}-darwin-arm64.{tar.gz,zip}` - macOS Apple Silicon\n- `hosts-manager-${nextRelease.version}-windows-amd64.{tar.gz,zip}` - Windows x64\n\n**Source Code:**\n- `hosts-manager-${nextRelease.version}-source.tar.gz` - Complete source code archive\n- `hosts-manager-${nextRelease.version}-source.zip` - Complete source code archive\n\n### 🚀 Quick Installation\n\n**Linux/macOS:**\n```bash\n# Download and extract (replace with your platform)\ncurl -L -o hosts-manager.tar.gz https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${nextRelease.version}/hosts-manager-${nextRelease.version}-linux-amd64.tar.gz\ntar -xzf hosts-manager.tar.gz\nsudo mv hosts-manager /usr/local/bin/hosts-manager\nchmod +x /usr/local/bin/hosts-manager\n```\n\n**Windows:**\nDownload the appropriate `.zip` file for your architecture and add the extracted `hosts-manager.exe` to your PATH.\n\n### 🔐 Checksums\nAll files are verified with SHA-256 checksums in `checksums.txt`.\n\n---\n\n${releaseNotes}"
+        "addReleases": "bottom"
       }
     ],
     [
