@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.9](https://github.com/brandonhon/hosts-manager/compare/v1.0.8...v1.0.9) (2025-09-29)
+
+### 🐛 Bug Fixes
+
+* resolve semantic-release workflow configuration issues ([d695e49](https://github.com/brandonhon/hosts-manager/commit/d695e49c590ddf0a1039eb8728b66cc979651efd))
+
 ## [1.0.8](https://github.com/brandonhon/hosts-manager/compare/v1.0.7...v1.0.8) (2025-09-29)
 
 ### 🚀 Features
