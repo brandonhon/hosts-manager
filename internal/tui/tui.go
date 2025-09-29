@@ -30,6 +30,14 @@ type model struct {
 	addComment   string
 	addCategory  string
 	addField     int // 0=IP, 1=hostnames, 2=comment, 3=category
+	// Move entry fields
+	moveEntryIndex    int    // Index of entry to move
+	moveCategoryCursor int   // Cursor for category selection
+	moveTargetCategory string // Target category name
+	// Create category fields
+	createCategoryName        string // Name of new category to create
+	createCategoryDescription string // Description of new category
+	createCategoryField       int    // 0=name, 1=description
 }
 
 type view int
@@ -39,6 +47,8 @@ const (
 	viewSearch
 	viewHelp
 	viewAdd
+	viewMove
+	viewCreateCategory
 )
 
 type entryWithIndex struct {
@@ -85,6 +95,11 @@ var (
 
 	successStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("76")).
+			Bold(true)
+
+	moveStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("208")).
+			Background(lipgloss.Color("53")).
 			Bold(true)
 )
 
@@ -147,6 +162,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateHelp(msg)
 		case viewAdd:
 			return m.updateAdd(msg)
+		case viewMove:
+			return m.updateMove(msg)
+		case viewCreateCategory:
+			return m.updateCreateCategory(msg)
 		}
 
 	case errorMsg:
@@ -244,6 +263,30 @@ func (m *model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.addComment = ""
 		m.addCategory = m.config.General.DefaultCategory
 		m.addField = 0
+
+	case "c":
+		m.currentView = viewCreateCategory
+		m.createCategoryName = ""
+		m.createCategoryDescription = ""
+		m.createCategoryField = 0
+
+	case "m":
+		if m.cursor < len(m.entries) {
+			m.currentView = viewMove
+			m.moveEntryIndex = m.cursor
+			m.moveCategoryCursor = 0
+			// Set initial target category to first available category different from current
+			currentCategory := m.entries[m.cursor].category
+			m.moveTargetCategory = ""
+			for _, cat := range m.categories {
+				if cat != currentCategory {
+					m.moveTargetCategory = cat
+					break
+				}
+			}
+		} else {
+			m.message = "No entry selected to move"
+		}
 
 	case "?", "h":
 		m.currentView = viewHelp
@@ -367,6 +410,239 @@ func (m *model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) updateMove(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.currentView = viewMain
+
+	case "up", "k":
+		if m.moveCategoryCursor > 0 {
+			m.moveCategoryCursor--
+			m.moveTargetCategory = m.getAvailableCategories()[m.moveCategoryCursor]
+		}
+
+	case "down", "j":
+		availableCategories := m.getAvailableCategories()
+		if m.moveCategoryCursor < len(availableCategories)-1 {
+			m.moveCategoryCursor++
+			m.moveTargetCategory = availableCategories[m.moveCategoryCursor]
+		}
+
+	case "enter":
+		if m.moveTargetCategory != "" && m.moveEntryIndex < len(m.entries) {
+			if err := m.moveEntry(m.moveEntryIndex, m.moveTargetCategory); err != nil {
+				m.message = fmt.Sprintf("Error moving entry: %v", err)
+			} else {
+				entryToMove := m.entries[m.moveEntryIndex]
+				m.message = fmt.Sprintf("Moved %s from %s to %s",
+					entryToMove.entry.Hostnames[0],
+					entryToMove.category,
+					m.moveTargetCategory)
+				m.entries = buildEntryList(m.hostsFile)
+				// Try to keep cursor on the same entry after move
+				m.cursor = m.findEntryAfterMove(entryToMove, m.moveTargetCategory)
+			}
+			m.currentView = viewMain
+		}
+	}
+
+	return m, nil
+}
+
+func (m *model) updateCreateCategory(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.currentView = viewMain
+
+	case "tab", "down":
+		m.createCategoryField = (m.createCategoryField + 1) % 2
+
+	case "shift+tab", "up":
+		m.createCategoryField = (m.createCategoryField + 1) % 2
+
+	case "enter":
+		if m.createCategoryName != "" {
+			// Validate category name
+			if err := m.validateCategoryName(m.createCategoryName); err != nil {
+				m.message = fmt.Sprintf("Invalid category name: %v", err)
+				return m, nil
+			}
+
+			// Check if category already exists
+			for _, existingCategory := range m.categories {
+				if existingCategory == m.createCategoryName {
+					m.message = fmt.Sprintf("Category '%s' already exists", m.createCategoryName)
+					return m, nil
+				}
+			}
+
+			// Create new category
+			if err := m.createCategory(m.createCategoryName, m.createCategoryDescription); err != nil {
+				m.message = fmt.Sprintf("Error creating category: %v", err)
+				return m, nil
+			}
+
+			// Update categories list and entries
+			m.categories = append(m.categories, m.createCategoryName)
+			m.entries = buildEntryList(m.hostsFile)
+			m.message = fmt.Sprintf("Created category: %s", m.createCategoryName)
+			m.currentView = viewMain
+		} else {
+			m.message = "Category name is required"
+		}
+
+	case "backspace":
+		switch m.createCategoryField {
+		case 0:
+			if len(m.createCategoryName) > 0 {
+				m.createCategoryName = m.createCategoryName[:len(m.createCategoryName)-1]
+			}
+		case 1:
+			if len(m.createCategoryDescription) > 0 {
+				m.createCategoryDescription = m.createCategoryDescription[:len(m.createCategoryDescription)-1]
+			}
+		}
+
+	default:
+		if len(msg.String()) == 1 {
+			switch m.createCategoryField {
+			case 0:
+				m.createCategoryName += msg.String()
+			case 1:
+				m.createCategoryDescription += msg.String()
+			}
+		}
+	}
+
+	return m, nil
+}
+
+// validateCategoryName validates a category name using the same rules as the config validator
+func (m *model) validateCategoryName(name string) error {
+	if name == "" {
+		return fmt.Errorf("category name cannot be empty")
+	}
+
+	if len(name) > 50 {
+		return fmt.Errorf("category name too long (max 50 characters)")
+	}
+
+	// Use same validation as config validator
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+			return fmt.Errorf("category name contains invalid characters (only a-z, A-Z, 0-9, _, - allowed)")
+		}
+	}
+
+	return nil
+}
+
+// createCategory adds a new category to the hosts file
+func (m *model) createCategory(name, description string) error {
+	// Create new category
+	newCategory := hosts.Category{
+		Name:        name,
+		Description: description,
+		Enabled:     true,
+		Entries:     []hosts.Entry{},
+	}
+
+	// Add to hosts file
+	m.hostsFile.Categories = append(m.hostsFile.Categories, newCategory)
+
+	return nil
+}
+
+// getAvailableCategories returns categories excluding the current entry's category
+func (m *model) getAvailableCategories() []string {
+	if m.moveEntryIndex >= len(m.entries) {
+		return m.categories
+	}
+
+	currentCategory := m.entries[m.moveEntryIndex].category
+	var available []string
+	for _, cat := range m.categories {
+		if cat != currentCategory {
+			available = append(available, cat)
+		}
+	}
+	return available
+}
+
+// findEntryAfterMove tries to find the entry's new position after moving
+func (m *model) findEntryAfterMove(movedEntry entryWithIndex, targetCategory string) int {
+	for i, entry := range m.entries {
+		if entry.category == targetCategory &&
+			entry.entry.IP == movedEntry.entry.IP &&
+			len(entry.entry.Hostnames) > 0 &&
+			len(movedEntry.entry.Hostnames) > 0 &&
+			entry.entry.Hostnames[0] == movedEntry.entry.Hostnames[0] {
+			return i
+		}
+	}
+	return 0 // Default to first entry if not found
+}
+
+// moveEntry moves an entry from its current category to the target category
+func (m *model) moveEntry(entryIndex int, targetCategory string) error {
+	if entryIndex >= len(m.entries) {
+		return fmt.Errorf("invalid entry index")
+	}
+
+	entryToMove := m.entries[entryIndex]
+	sourceCategory := entryToMove.category
+
+	// Find the source category in hostsFile
+	var sourceCat *hosts.Category
+	for i := range m.hostsFile.Categories {
+		if m.hostsFile.Categories[i].Name == sourceCategory {
+			sourceCat = &m.hostsFile.Categories[i]
+			break
+		}
+	}
+	if sourceCat == nil {
+		return fmt.Errorf("source category not found: %s", sourceCategory)
+	}
+
+	// Find the target category in hostsFile
+	var targetCat *hosts.Category
+	for i := range m.hostsFile.Categories {
+		if m.hostsFile.Categories[i].Name == targetCategory {
+			targetCat = &m.hostsFile.Categories[i]
+			break
+		}
+	}
+	if targetCat == nil {
+		return fmt.Errorf("target category not found: %s", targetCategory)
+	}
+
+	// Find and remove the entry from source category
+	var entryToMoveData hosts.Entry
+	entryFound := false
+	for i, entry := range sourceCat.Entries {
+		if entry.IP == entryToMove.entry.IP &&
+			len(entry.Hostnames) > 0 &&
+			len(entryToMove.entry.Hostnames) > 0 &&
+			entry.Hostnames[0] == entryToMove.entry.Hostnames[0] {
+			entryToMoveData = entry
+			entryToMoveData.Category = targetCategory
+			// Remove from source category
+			sourceCat.Entries = append(sourceCat.Entries[:i], sourceCat.Entries[i+1:]...)
+			entryFound = true
+			break
+		}
+	}
+
+	if !entryFound {
+		return fmt.Errorf("entry not found in source category")
+	}
+
+	// Add to target category
+	targetCat.Entries = append(targetCat.Entries, entryToMoveData)
+
+	return nil
+}
+
 func (m *model) filterEntries() {
 	if m.searchQuery == "" {
 		m.entries = buildEntryList(m.hostsFile)
@@ -430,6 +706,10 @@ func (m *model) View() string {
 		return m.viewHelp()
 	case viewAdd:
 		return m.viewAdd()
+	case viewMove:
+		return m.viewMove()
+	case viewCreateCategory:
+		return m.viewCreateCategory()
 	}
 
 	return ""
@@ -497,7 +777,7 @@ func (m *model) viewMain() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("\nControls: space=toggle, a=add, d=delete, s=save, /=search, ?=help, q=quit"))
+	b.WriteString(helpStyle.Render("\nControls: space=toggle, a=add, c=create category, m=move, d=delete, s=save, /=search, ?=help, q=quit"))
 
 	return b.String()
 }
@@ -534,6 +814,8 @@ Navigation:
 Actions:
   space     Toggle entry enabled/disabled
   a         Add new entry
+  c         Create new category
+  m         Move entry to different category
   d         Delete entry
   s         Save changes to hosts file
   r         Refresh entry list
@@ -595,6 +877,81 @@ func (m *model) viewAdd() string {
 	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Press Enter to add entry, Esc to cancel"))
+
+	return b.String()
+}
+
+func (m *model) viewMove() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Move Entry to Category"))
+	b.WriteString("\n\n")
+
+	// Show the entry being moved
+	if m.moveEntryIndex < len(m.entries) {
+		entry := m.entries[m.moveEntryIndex]
+		entryStr := fmt.Sprintf("Moving: %s -> %s",
+			entry.entry.IP,
+			strings.Join(entry.entry.Hostnames, " "))
+		if entry.entry.Comment != "" {
+			entryStr += " # " + entry.entry.Comment
+		}
+		b.WriteString(moveStyle.Render(entryStr))
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("From category: %s\n\n", entry.category))
+	}
+
+	b.WriteString("Select target category:\n")
+
+	// Show available categories
+	availableCategories := m.getAvailableCategories()
+	for i, category := range availableCategories {
+		cursor := "  "
+		if i == m.moveCategoryCursor {
+			cursor = "> "
+		}
+
+		line := cursor + category
+		if i == m.moveCategoryCursor {
+			line = selectedStyle.Render(line)
+		}
+
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Use ↑/↓ to select category, Enter to move, Esc to cancel"))
+
+	return b.String()
+}
+
+func (m *model) viewCreateCategory() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Create New Category"))
+	b.WriteString("\n\n")
+
+	// Name field
+	nameLabel := "Category Name:"
+	if m.createCategoryField == 0 {
+		nameLabel = selectedStyle.Render("Category Name:")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", nameLabel, m.createCategoryName))
+
+	// Description field
+	descLabel := "Description (optional):"
+	if m.createCategoryField == 1 {
+		descLabel = selectedStyle.Render("Description (optional):")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", descLabel, m.createCategoryDescription))
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Category names can contain: a-z, A-Z, 0-9, _, -"))
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Press Enter to create category, Esc to cancel"))
 
 	return b.String()
 }
