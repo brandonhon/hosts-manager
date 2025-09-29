@@ -70,25 +70,37 @@ jobs:
           body: |
             ## Release ${{ env.VERSION }}
             
-            Cross-platform binaries for hosts-manager.
+            Cross-platform binaries and source code for hosts-manager.
             
-            ### Installation
+            ### 📦 Available Downloads
+            
+            **Compiled Binaries (both .tar.gz and .zip formats):**
+            - `hosts-manager-${{ env.VERSION }}-linux-amd64.{tar.gz,zip}` - Linux x64
+            - `hosts-manager-${{ env.VERSION }}-linux-arm64.{tar.gz,zip}` - Linux ARM64
+            - `hosts-manager-${{ env.VERSION }}-darwin-amd64.{tar.gz,zip}` - macOS Intel
+            - `hosts-manager-${{ env.VERSION }}-darwin-arm64.{tar.gz,zip}` - macOS Apple Silicon
+            - `hosts-manager-${{ env.VERSION }}-windows-amd64.{tar.gz,zip}` - Windows x64
+            
+            **Source Code:**
+            - `hosts-manager-${{ env.VERSION }}-source.tar.gz` - Complete source code archive
+            - `hosts-manager-${{ env.VERSION }}-source.zip` - Complete source code archive
+            
+            ### 🚀 Quick Installation
             
             **Linux/macOS:**
             ```bash
+            # Download and extract (replace with your platform)
             curl -L -o hosts-manager.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/hosts-manager-${{ env.VERSION }}-linux-amd64.tar.gz
             tar -xzf hosts-manager.tar.gz
-            sudo mv hosts-manager-linux-amd64 /usr/local/bin/hosts-manager
+            sudo mv hosts-manager /usr/local/bin/hosts-manager
             chmod +x /usr/local/bin/hosts-manager
             ```
             
             **Windows:**
-            Download the `.zip` file and add the extracted binary to your PATH.
+            Download the appropriate `.zip` file for your architecture and add the extracted `hosts-manager.exe` to your PATH.
             
-            ### Checksums
-            ```
-            $(cat dist/checksums.txt)
-            ```
+            ### 🔐 Checksums
+            All files are verified with SHA-256 checksums in `checksums.txt`.
 
       - name: Upload build artifacts
         if: github.event_name == 'workflow_dispatch'
