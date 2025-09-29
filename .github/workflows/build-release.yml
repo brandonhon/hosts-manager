@@ -1,8 +1,6 @@
-name: Build and Release
+name: Manual Build and Release
 
 on:
-  release:
-    types: [created]
   workflow_dispatch:
     inputs:
       version:
@@ -45,11 +43,7 @@ jobs:
       - name: Set version
         id: version
         run: |
-          if [ "${{ github.event_name }}" == "release" ]; then
-            VERSION=${{ github.event.release.tag_name }}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
+          VERSION=${{ github.event.inputs.version }}
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
@@ -60,7 +54,6 @@ jobs:
         run: VERSION=${{ env.VERSION }} make dist
 
       - name: Upload release assets
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -103,7 +96,6 @@ jobs:
             All files are verified with SHA-256 checksums in `checksums.txt`.
 
       - name: Upload build artifacts
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: hosts-manager-${{ env.VERSION }}
