@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.7](https://github.com/brandonhon/hosts-manager/compare/v1.0.6...v1.0.7) (2025-09-29)
+
+### 🚀 Features
+
+* enhance release system with comprehensive binary and source distribution ([d145cc4](https://github.com/brandonhon/hosts-manager/commit/d145cc433c91e9c26fd2582b5f56af03a3ad19ec))
+
 ## [1.0.6](https://github.com/brandonhon/hosts-manager/compare/v1.0.5...v1.0.6) (2025-09-28)
 
 ### 🐛 Bug Fixes
