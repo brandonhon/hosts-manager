@@ -28,6 +28,24 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
       - name: Install semantic-release
         run: |
           npm install -g semantic-release@24
@@ -36,9 +54,39 @@ jobs:
           npm install -g @semantic-release/github@10
           npm install -g conventional-changelog-conventionalcommits@8
 
-
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release --debug
+
+      - name: Get release version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$VERSION" ]; then
+            echo "VERSION=${VERSION}" >> $GITHUB_ENV
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "Release version: $VERSION"
+          else
+            echo "No new release created"
+            exit 0
+          fi
+
+      - name: Build release binaries
+        if: env.VERSION
+        run: VERSION=${{ env.VERSION }} make dist
+
+      - name: Upload release assets
+        if: env.VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Uploading assets for release ${{ env.VERSION }}..."
+          for file in dist/*.tar.gz dist/*.zip dist/checksums.txt; do
+            if [ -f "$file" ]; then
+              echo "Uploading $(basename "$file")..."
+              gh release upload ${{ env.VERSION }} "$file" --clobber
+            fi
+          done
+          echo "All assets uploaded successfully!"
