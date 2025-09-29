@@ -30,6 +30,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize secure directories at startup to ensure they exist
+	// This prevents runtime errors and provides clear user guidance
+	if err := ensureSecureDirectories(); err != nil {
+		// Log the initialization failure
+		if logger, logErr := audit.NewLogger(); logErr == nil {
+			logger.LogSecurityViolation("startup", "directory_initialization", err.Error(), nil)
+		}
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize secure directories: %v\n", err)
+		// Continue execution as some operations might still work
+	}
+
 	rootCmd := &cobra.Command{
 		Use:   "hosts-manager",
 		Short: "Cross-platform hosts file manager",

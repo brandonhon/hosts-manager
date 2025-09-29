@@ -166,6 +166,14 @@ func exportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export hosts entries",
+		Long: `Export hosts file to different format (json, yaml, hosts).
+
+For security, export operations are restricted to these directories:
+• ~/.local/share/hosts-manager/ (data directory)
+• ~/.config/hosts-manager/ (config directory)
+• /tmp/hosts-manager/ (temporary directory)
+
+Use relative paths (e.g., 'my-export.json') or paths within these directories.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
 			parser := hosts.NewParser(p.GetHostsFilePath())
@@ -204,10 +212,16 @@ func exportCmd() *cobra.Command {
 			if output == "" {
 				fmt.Print(string(data))
 			} else {
-				// Validate output path for security
-				outputPath, err := validateFilePath(output, "")
+				// Ensure secure directories exist
+				if err := ensureSecureDirectories(); err != nil {
+					return fmt.Errorf("failed to initialize secure directories: %w", err)
+				}
+
+				// Validate output path using secure directory restrictions
+				allowedDirs := getAllowedDirectories()
+				outputPath, err := validateFilePathStrict(output, allowedDirs, "export")
 				if err != nil {
-					return fmt.Errorf("invalid output path: %w", err)
+					return fmt.Errorf("export path validation failed: %w", err)
 				}
 
 				if err := os.WriteFile(outputPath, data, 0600); err != nil {
@@ -234,7 +248,15 @@ func importCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import <file>",
 		Short: "Import hosts entries from file",
-		Args:  cobra.ExactArgs(1),
+		Long: `Import hosts entries from a file (json or yaml format).
+
+For security, import operations are restricted to these directories:
+• ~/.local/share/hosts-manager/ (data directory)
+• ~/.config/hosts-manager/ (config directory)
+• /tmp/hosts-manager/ (temporary directory)
+
+Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
 			if err := p.ElevateIfNeeded(); err != nil {
@@ -243,10 +265,16 @@ func importCmd() *cobra.Command {
 
 			userPath := args[0]
 
-			// Validate import file path for security
-			filePath, err := validateFilePath(userPath, "")
+			// Ensure secure directories exist
+			if err := ensureSecureDirectories(); err != nil {
+				return fmt.Errorf("failed to initialize secure directories: %w", err)
+			}
+
+			// Validate import file path using secure directory restrictions
+			allowedDirs := getAllowedDirectories()
+			filePath, err := validateFilePathStrict(userPath, allowedDirs, "import")
 			if err != nil {
-				return fmt.Errorf("invalid import file path: %w", err)
+				return fmt.Errorf("import path validation failed: %w", err)
 			}
 
 			data, err := os.ReadFile(filePath)
@@ -602,42 +630,113 @@ func formatSize(size int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
 }
 
-// validateFilePath validates that a file path is safe and prevents path traversal attacks
-func validateFilePath(filePath string, allowedDir string) (string, error) {
+// getAllowedDirectories returns the list of directories where file operations are permitted
+func getAllowedDirectories() []string {
+	p := platform.New()
+	return []string{
+		p.GetDataDir(),   // User data directory (e.g., ~/.local/share/hosts-manager)
+		p.GetConfigDir(), // User config directory (e.g., ~/.config/hosts-manager)
+		filepath.Join(os.TempDir(), "hosts-manager"), // Secure temp directory
+		// Note: backup directory is handled separately in cfg.Backup.Directory
+	}
+}
+
+// ensureSecureDirectories creates the allowed directories with proper permissions
+func ensureSecureDirectories() error {
+	dirs := getAllowedDirectories()
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("failed to create secure directory %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+// validateFilePathStrict validates file paths with mandatory directory restrictions
+func validateFilePathStrict(filePath string, allowedDirs []string, operation string) (string, error) {
+	if len(allowedDirs) == 0 {
+		return "", fmt.Errorf("no allowed directories specified for %s operation", operation)
+	}
+
+	// Log security-sensitive path validation attempts
+	if logger, err := audit.NewLogger(); err == nil {
+		logger.LogFileOperation(operation+"_path_validation", filePath, true, "")
+	}
+
 	// Clean the path to resolve any ".." or similar elements
 	cleanPath := filepath.Clean(filePath)
 
-	// Convert to absolute path if relative
+	// Additional security checks first
+	if strings.Contains(cleanPath, "\x00") {
+		if logger, err := audit.NewLogger(); err == nil {
+			logger.LogSecurityViolation("path_validation", filePath, "null byte detected in path", map[string]interface{}{
+				"operation": operation,
+				"path":      filePath,
+			})
+		}
+		return "", fmt.Errorf("invalid path: contains null byte")
+	}
+
+	// Try to validate against each allowed directory
+	var validationErrors []string
+	for _, allowedDir := range allowedDirs {
+		if validatedPath, err := validateFilePath(cleanPath, allowedDir); err == nil {
+			return validatedPath, nil
+		} else {
+			validationErrors = append(validationErrors, fmt.Sprintf("%s: %v", allowedDir, err))
+		}
+	}
+
+	// If no allowed directory worked, this is a security violation
+	if logger, err := audit.NewLogger(); err == nil {
+		logger.LogSecurityViolation("path_validation", filePath, "path not in allowed directories", map[string]interface{}{
+			"operation":         operation,
+			"path":              filePath,
+			"allowed_dirs":      allowedDirs,
+			"validation_errors": validationErrors,
+		})
+	}
+
+	return "", fmt.Errorf("%s operation denied: path '%s' is not within allowed directories: %v",
+		operation, filePath, allowedDirs)
+}
+
+// validateFilePath validates that a file path is safe and prevents path traversal attacks
+// This function now requires an allowedDir to be specified for security
+func validateFilePath(filePath string, allowedDir string) (string, error) {
+	if allowedDir == "" {
+		return "", fmt.Errorf("security error: allowed directory must be specified for path validation")
+	}
+
+	// Clean the path to resolve any ".." or similar elements
+	cleanPath := filepath.Clean(filePath)
+
+	// Convert to absolute path
 	var absPath string
 	if filepath.IsAbs(cleanPath) {
 		absPath = cleanPath
 	} else {
-		if allowedDir == "" {
-			return "", fmt.Errorf("relative paths not allowed when no base directory is specified")
-		}
 		absPath = filepath.Join(allowedDir, cleanPath)
 	}
 
 	// Clean again after joining
 	absPath = filepath.Clean(absPath)
 
-	// If an allowed directory is specified, ensure the path is within it
-	if allowedDir != "" {
-		allowedDirAbs, err := filepath.Abs(allowedDir)
-		if err != nil {
-			return "", fmt.Errorf("failed to resolve allowed directory: %w", err)
-		}
+	// Get absolute path of allowed directory
+	allowedDirAbs, err := filepath.Abs(allowedDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve allowed directory: %w", err)
+	}
 
-		// Ensure the file path is within the allowed directory
-		relPath, err := filepath.Rel(allowedDirAbs, absPath)
-		if err != nil {
-			return "", fmt.Errorf("failed to compute relative path: %w", err)
-		}
+	// Ensure the file path is within the allowed directory
+	relPath, err := filepath.Rel(allowedDirAbs, absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute relative path: %w", err)
+	}
 
-		// Check if the relative path tries to escape the allowed directory
-		if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
-			return "", fmt.Errorf("path traversal attempt detected: %s", filePath)
-		}
+	// Check if the relative path tries to escape the allowed directory
+	if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
+		return "", fmt.Errorf("path traversal attempt detected: %s", filePath)
 	}
 
 	// Additional security checks
