@@ -139,34 +139,37 @@ release: clean
 	@echo "Building release binaries..."
 	@mkdir -p $(DIST_DIR)
 	@for platform in $(PLATFORMS); do \
-		os_arch=$$(echo $$platform | tr '/' '-'); \
 		os=$$(echo $$platform | cut -d'/' -f1); \
 		arch=$$(echo $$platform | cut -d'/' -f2); \
 		echo "Building for $$os/$$arch..."; \
-		output_name=$(BINARY_NAME)-$(VERSION)-$$os_arch; \
-		if [ $$os = "windows" ]; then output_name=$$output_name.exe; fi; \
-		env GOOS=$$os GOARCH=$$arch GO111MODULE=on $(GOBUILD) $(BUILD_FLAGS) -o $(DIST_DIR)/$$output_name $(SRC_DIR); \
+		binary_name=$(BINARY_NAME); \
+		if [ $$os = "windows" ]; then binary_name=$$binary_name.exe; fi; \
+		env GOOS=$$os GOARCH=$$arch GO111MODULE=on $(GOBUILD) $(BUILD_FLAGS) -o $(DIST_DIR)/$$binary_name $(SRC_DIR); \
+		\
+		archive_name=$(BINARY_NAME)-$(VERSION)-$$os-$$arch; \
+		echo "Creating archives for $$archive_name..."; \
+		\
+		cd $(DIST_DIR); \
+		tar -czf $$archive_name.tar.gz $$binary_name; \
+		zip -q $$archive_name.zip $$binary_name; \
+		rm $$binary_name; \
+		cd ..; \
 	done
-	@echo "Release binaries built in $(DIST_DIR)/"
+	@echo "Release binaries packaged in $(DIST_DIR)/"
 
-# Create distribution packages
+# Create distribution packages with source code
 dist: release
-	@echo "Creating distribution packages..."
-	@cd $(DIST_DIR) && \
-	for binary in $(BINARY_NAME)-$(VERSION)-*; do \
-		if [[ $$binary == *".exe" ]]; then \
-			zip $$binary.zip $$binary; \
-		else \
-			tar -czf $$binary.tar.gz $$binary; \
-		fi; \
-	done
+	@echo "Creating source code archives..."
+	@mkdir -p $(DIST_DIR)
+	@# Create source archive excluding build artifacts and git files
+	@tar --exclude='$(BUILD_DIR)' --exclude='$(DIST_DIR)' --exclude='.git' \
+		--exclude='*.log' --exclude='.DS_Store' --exclude='node_modules' \
+		-czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-source.tar.gz .
+	@zip -r $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-source.zip . \
+		-x '$(BUILD_DIR)/*' '$(DIST_DIR)/*' '.git/*' '*.log' '.DS_Store' 'node_modules/*' > /dev/null
 	@echo "Generating checksums..."
 	@cd $(DIST_DIR) && \
-	for file in *.tar.gz *.zip; do \
-		if [ -f "$$file" ]; then \
-			sha256sum "$$file" >> checksums.txt; \
-		fi; \
-	done
+	sha256sum *.tar.gz *.zip > checksums.txt
 	@echo "Distribution packages created in $(DIST_DIR)/"
 
 # Run the application
