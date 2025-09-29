@@ -63,22 +63,34 @@ jobs:
       - name: Get release version
         id: version
         run: |
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$VERSION" ]; then
-            echo "VERSION=${VERSION}" >> $GITHUB_ENV
-            echo "version=${VERSION}" >> $GITHUB_OUTPUT
-            echo "Release version: $VERSION"
+          # Get the latest tag created in this run
+          LATEST_TAG=$(git tag --sort=-version:refname | head -n1 2>/dev/null || echo "")
+          # Check if this tag was created in the last minute (indicating it was just created by semantic-release)
+          if [ -n "$LATEST_TAG" ]; then
+            TAG_DATE=$(git log -1 --format=%ct "$LATEST_TAG" 2>/dev/null || echo "0")
+            CURRENT_TIME=$(date +%s)
+            TIME_DIFF=$((CURRENT_TIME - TAG_DATE))
+            
+            if [ $TIME_DIFF -lt 300 ]; then  # Tag created in last 5 minutes
+              echo "VERSION=${LATEST_TAG}" >> $GITHUB_ENV
+              echo "version=${LATEST_TAG}" >> $GITHUB_OUTPUT
+              echo "New release detected: $LATEST_TAG"
+              echo "HAS_RELEASE=true" >> $GITHUB_ENV
+            else
+              echo "No new release created in this run"
+              echo "HAS_RELEASE=false" >> $GITHUB_ENV
+            fi
           else
-            echo "No new release created"
-            exit 0
+            echo "No tags found"
+            echo "HAS_RELEASE=false" >> $GITHUB_ENV
           fi
 
       - name: Build release binaries
-        if: env.VERSION
+        if: env.HAS_RELEASE == 'true'
         run: VERSION=${{ env.VERSION }} make dist
 
       - name: Upload release assets
-        if: env.VERSION
+        if: env.HAS_RELEASE == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
