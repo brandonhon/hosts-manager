@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.11](https://github.com/brandonhon/hosts-manager/compare/v1.0.10...v1.0.11) (2025-09-29)
+
+### 🚀 Features
+
+* add TUI category creation and move functionality ([d54d006](https://github.com/brandonhon/hosts-manager/commit/d54d006b6469e320fd53d3c2e04b1ca1f2256d43))
+
 ## [1.0.10](https://github.com/brandonhon/hosts-manager/compare/v1.0.9...v1.0.10) (2025-09-29)
 
 ### 🐛 Bug Fixes
