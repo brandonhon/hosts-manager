@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.5](https://github.com/brandonhon/hosts-manager/compare/v0.4.4...v0.4.5) (2025-09-30)
+
+### 🐛 Bug Fixes
+
+* remove deprecated service section from golangci-lint config ([c58266f](https://github.com/brandonhon/hosts-manager/commit/c58266f8c945ee05e68026dfb451a3d11550b16c))
+
 ## [0.4.4](https://github.com/brandonhon/hosts-manager/compare/v0.4.3...v0.4.4) (2025-09-30)
 
 ### 🐛 Bug Fixes
