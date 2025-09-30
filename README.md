@@ -1,7 +1,7 @@
 # Hosts Manager
 
 [![Release](https://img.shields.io/github/v/release/brandonhon/hosts-manager)](https://github.com/brandonhon/hosts-manager/releases)
-[![Build Status](https://github.com/brandonhon/hosts-manager/workflows/CI/badge.svg?branch=main)](https://github.com/brandonhon/hosts-manager/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/brandonhon/hosts-manager/ci.yml?branch=main&label=build)](https://github.com/brandonhon/hosts-manager/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/brandonhon/hosts-manager)](https://goreportcard.com/report/github.com/brandonhon/hosts-manager)
 [![License](https://img.shields.io/github/license/brandonhon/hosts-manager)](LICENSE)
 
