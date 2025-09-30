@@ -529,7 +529,7 @@ func (m *model) validateCategoryName(name string) error {
 
 	// Use same validation as config validator
 	for _, r := range name {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' {
 			return fmt.Errorf("category name contains invalid characters (only a-z, A-Z, 0-9, _, - allowed)")
 		}
 	}
