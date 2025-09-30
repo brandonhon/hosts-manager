@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -344,14 +345,17 @@ func TestRestoreFileWithPermissionPreservation(t *testing.T) {
 		t.Fatalf("Failed to restore file: %v", err)
 	}
 
-	// Check that permissions were preserved
-	restoredInfo, err := os.Stat(originalPath)
-	if err != nil {
-		t.Fatalf("Failed to stat restored file: %v", err)
-	}
+	// Check that permissions were preserved (Unix only)
+	// Windows file permissions work differently and don't support traditional Unix permission bits
+	if runtime.GOOS != "windows" {
+		restoredInfo, err := os.Stat(originalPath)
+		if err != nil {
+			t.Fatalf("Failed to stat restored file: %v", err)
+		}
 
-	if restoredInfo.Mode().Perm() != 0755 {
-		t.Errorf("Expected permissions 0755, got %o", restoredInfo.Mode().Perm())
+		if restoredInfo.Mode().Perm() != 0755 {
+			t.Errorf("Expected permissions 0755, got %o", restoredInfo.Mode().Perm())
+		}
 	}
 }
 
