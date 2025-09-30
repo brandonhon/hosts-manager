@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.0](https://github.com/brandonhon/hosts-manager/compare/v0.3.2...v0.4.0) (2025-09-30)
+
+### 🚀 Features
+
+* optimize CI workflows to run only on Go code changes ([8d66fb1](https://github.com/brandonhon/hosts-manager/commit/8d66fb1e369a2d441870719a647d3bf1837019fa))
+
 ## [0.3.2](https://github.com/brandonhon/hosts-manager/compare/v0.3.1...v0.3.2) (2025-09-30)
 
 ### 📚 Documentation
