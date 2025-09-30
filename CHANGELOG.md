@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.6](https://github.com/brandonhon/hosts-manager/compare/v0.4.5...v0.4.6) (2025-09-30)
+
+### 🐛 Bug Fixes
+
+* resolve goimports formatting issues ([0b3990f](https://github.com/brandonhon/hosts-manager/commit/0b3990f5071456ca0c17013539d843c58e2f518d))
+
 ## [0.4.5](https://github.com/brandonhon/hosts-manager/compare/v0.4.4...v0.4.5) (2025-09-30)
 
 ### 🐛 Bug Fixes
