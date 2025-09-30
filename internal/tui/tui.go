@@ -31,8 +31,8 @@ type model struct {
 	addCategory  string
 	addField     int // 0=IP, 1=hostnames, 2=comment, 3=category
 	// Move entry fields
-	moveEntryIndex    int    // Index of entry to move
-	moveCategoryCursor int   // Cursor for category selection
+	moveEntryIndex     int    // Index of entry to move
+	moveCategoryCursor int    // Cursor for category selection
 	moveTargetCategory string // Target category name
 	// Create category fields
 	createCategoryName        string // Name of new category to create

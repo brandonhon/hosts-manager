@@ -2,6 +2,9 @@ run:
   timeout: 5m
   tests: true
 
+service:
+  golangci-lint-version: 1.61.0 # use the fixed version to have reproducible results
+
 linters:
   enable:
     - gosimple
