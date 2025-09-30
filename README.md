@@ -1,7 +1,7 @@
 # Hosts Manager
 
 [![Release](https://img.shields.io/github/v/release/brandonhon/hosts-manager)](https://github.com/brandonhon/hosts-manager/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/brandonhon/hosts-manager/ci.yml?branch=main)](https://github.com/brandonhon/hosts-manager/actions)
+[![Build Status](https://github.com/brandonhon/hosts-manager/workflows/CI/badge.svg?branch=main)](https://github.com/brandonhon/hosts-manager/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/brandonhon/hosts-manager)](https://goreportcard.com/report/github.com/brandonhon/hosts-manager)
 [![License](https://img.shields.io/github/license/brandonhon/hosts-manager)](LICENSE)
 
@@ -502,7 +502,7 @@ Hosts Manager implements comprehensive security measures to protect your system:
 
 ### Security Audit Trail
 This project has undergone comprehensive security auditing and hardening:
-- **Final Security Rating**: A- (Excellent) - Exceeds industry standards for system utilities
+- **Final Security Rating**: A+ (Excellent) - Exceeds industry standards for system utilities
 - **Comprehensive Testing**: All security measures validated through automated and manual testing
 - **Zero Critical Issues**: All high-priority vulnerabilities resolved and mitigated
 - **Continuous Monitoring**: Automated security scanning integrated into CI/CD pipeline
@@ -585,6 +585,11 @@ See the [latest release](https://github.com/brandonhon/hosts-manager/releases/la
 **Version Strategy:**
 - **0.x.x releases**: Development versions with evolving features and API changes
 - **1.0.0 release**: Planned stable release with locked API and guaranteed backward compatibility
+
+**Release Process:**
+- New releases are triggered automatically only for changes to Go source code
+- Documentation-only changes do not trigger new releases
+- Uses semantic versioning based on conventional commit messages
 
 The project is suitable for testing, development environments, and feedback. Use with caution in production until the 1.0.0 stable release.
 
