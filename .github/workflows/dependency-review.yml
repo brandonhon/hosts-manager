@@ -3,6 +3,10 @@ name: Dependency Review
 on:
   pull_request:
     branches: [ main ]
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/dependency-review.yml'
 
 permissions:
   contents: read
