@@ -147,11 +147,14 @@ release: clean
 		env GOOS=$$os GOARCH=$$arch GO111MODULE=on $(GOBUILD) $(BUILD_FLAGS) -o $(DIST_DIR)/$$binary_name $(SRC_DIR); \
 		\
 		archive_name=$(BINARY_NAME)-$(VERSION)-$$os-$$arch; \
-		echo "Creating archives for $$archive_name..."; \
+		echo "Creating archive for $$archive_name..."; \
 		\
 		cd $(DIST_DIR); \
-		tar -czf $$archive_name.tar.gz $$binary_name; \
-		zip -q $$archive_name.zip $$binary_name; \
+		if [ $$os = "windows" ]; then \
+			zip -q $$archive_name.zip $$binary_name; \
+		else \
+			tar -czf $$archive_name.tar.gz $$binary_name; \
+		fi; \
 		rm $$binary_name; \
 		cd ..; \
 	done
