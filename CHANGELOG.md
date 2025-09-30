@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.2](https://github.com/brandonhon/hosts-manager/compare/v0.4.1...v0.4.2) (2025-09-30)
+
+### 🐛 Bug Fixes
+
+* apply De Morgan's law to improve code clarity in TUI validation ([54d13f7](https://github.com/brandonhon/hosts-manager/commit/54d13f7aa072c0de00d740ed3dc35980a4cb5081))
+
 ## [0.4.1](https://github.com/brandonhon/hosts-manager/compare/v0.4.0...v0.4.1) (2025-09-30)
 
 ### 🐛 Bug Fixes
