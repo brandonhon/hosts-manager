@@ -436,39 +436,27 @@ func (l *Logger) compressLog(logPath string) error {
 		return fmt.Errorf("log file too large for compression: %d bytes (max: %d)", fileInfo.Size(), maxCompressionSize)
 	}
 
-	// Read the original file
-	originalFile, err := os.Open(logPath)
-	if err != nil {
-		return fmt.Errorf("failed to open log for compression: %w", err)
-	}
-	defer func() {
-		if err := originalFile.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close original file: %v\n", err)
-		}
-	}()
-
-	// Create compressed file
+	// Create compressed file first
 	compressedPath := logPath + ".gz"
 	compressedFile, err := os.Create(compressedPath)
 	if err != nil {
 		return fmt.Errorf("failed to create compressed log: %w", err)
 	}
-	defer func() {
-		if err := compressedFile.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close compressed file: %v\n", err)
-		}
-	}()
 
 	// Create gzip writer with optimized compression settings
 	gzipWriter, err := gzip.NewWriterLevel(compressedFile, gzip.BestSpeed)
 	if err != nil {
+		_ = compressedFile.Close()
 		return fmt.Errorf("failed to create gzip writer: %w", err)
 	}
-	defer func() {
-		if err := gzipWriter.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close gzip writer: %v\n", err)
-		}
-	}()
+
+	// Read and compress the original file
+	originalFile, err := os.Open(logPath)
+	if err != nil {
+		_ = gzipWriter.Close()
+		_ = compressedFile.Close()
+		return fmt.Errorf("failed to open log for compression: %w", err)
+	}
 
 	// Stream the file in chunks to avoid loading entire file in memory
 	const bufferSize = 64 * 1024 // 64KB chunks
@@ -480,17 +468,35 @@ func (l *Logger) compressLog(logPath string) error {
 			if err == io.EOF {
 				break
 			}
+			_ = originalFile.Close()
+			_ = gzipWriter.Close()
+			_ = compressedFile.Close()
 			return fmt.Errorf("failed to read from original log: %w", err)
 		}
 
 		if _, writeErr := gzipWriter.Write(buffer[:n]); writeErr != nil {
+			_ = originalFile.Close()
+			_ = gzipWriter.Close()
+			_ = compressedFile.Close()
 			return fmt.Errorf("failed to write compressed data: %w", writeErr)
 		}
 	}
 
-	// Ensure all data is written
+	// Close original file first (important for Windows)
+	if err := originalFile.Close(); err != nil {
+		_ = gzipWriter.Close()
+		_ = compressedFile.Close()
+		return fmt.Errorf("failed to close original file: %w", err)
+	}
+
+	// Finalize compression
 	if err := gzipWriter.Close(); err != nil {
+		_ = compressedFile.Close()
 		return fmt.Errorf("failed to finalize compression: %w", err)
+	}
+
+	if err := compressedFile.Close(); err != nil {
+		return fmt.Errorf("failed to close compressed file: %w", err)
 	}
 
 	// Verify compressed file was created successfully
@@ -498,7 +504,7 @@ func (l *Logger) compressLog(logPath string) error {
 		return fmt.Errorf("compressed file verification failed")
 	}
 
-	// Remove original uncompressed file only after successful compression
+	// Remove original uncompressed file only after successful compression and file closure
 	if err := os.Remove(logPath); err != nil {
 		return fmt.Errorf("failed to remove original log after compression: %w", err)
 	}
