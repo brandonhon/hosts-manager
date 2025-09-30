@@ -47,6 +47,7 @@ func main() {
 		Long: `hosts-manager is a cross-platform CLI tool for managing your hosts file.
 It provides a template system, backup/restore, interactive TUI mode, and more.`,
 	}
+	// Ensure proper initialization and configuration validation
 
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", cfg.General.Verbose, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", cfg.General.DryRun, "Show what would be done without making changes")
