@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.4](https://github.com/brandonhon/hosts-manager/compare/v0.4.3...v0.4.4) (2025-09-30)
+
+### 🐛 Bug Fixes
+
+* pin golangci-lint version for consistent CI behavior ([d78d640](https://github.com/brandonhon/hosts-manager/commit/d78d6408f1255575cb5a2f49e70cb9e34a73b9f3))
+* resolve CI failures with golangci-lint version and Windows tests ([070d6fb](https://github.com/brandonhon/hosts-manager/commit/070d6fbe7da45daf2995a67cd7353261e99485bd))
+
 ## [0.4.3](https://github.com/brandonhon/hosts-manager/compare/v0.4.2...v0.4.3) (2025-09-30)
 
 ### 🐛 Bug Fixes
