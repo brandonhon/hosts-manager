@@ -6,6 +6,15 @@ This document provides guidelines and commands for Claude when working on the Ho
 
 Hosts Manager is a cross-platform CLI tool for managing hosts files with advanced features like templates, backup/restore, interactive TUI, and search capabilities.
 
+**Current Status**: Development release 0.3.0+ with comprehensive security hardening (A- security rating), enhanced TUI with category management, and automated release pipeline.
+
+**Key Features**:
+- Cross-platform support (Linux, macOS, Windows)  
+- Interactive TUI with move/create category features
+- Comprehensive security framework with audit logging
+- Automated testing and release workflows
+- Multi-platform binary distribution
+
 ## Quick Commands
 
 ### Build and Test
@@ -87,6 +96,9 @@ hosts-manager/
 - Interactive terminal interface using Bubble Tea
 - Navigation, search, and editing capabilities
 - Vim-like keybindings support
+- **New Features**: Move entries between categories, create custom categories
+- Views: Main, Search, Help, Add Entry, Move Entry, Create Category
+- Real-time filtering and entry management
 
 ### 5. Search Engine (`pkg/search/search.go`)
 - Fuzzy search with scoring
@@ -136,6 +148,120 @@ configDir := p.GetConfigDir()      // Cross-platform
 
 if err := p.ElevateIfNeeded(); err != nil {
     return err  // Handle permission elevation
+}
+```
+
+### TUI Development (`internal/tui/tui.go`)
+
+The TUI is built with Bubble Tea and supports multiple views and interactive workflows.
+
+#### TUI Architecture
+```go
+type model struct {
+    hostsFile    *hosts.HostsFile
+    config       *config.Config
+    currentView  view             // Current view mode
+    cursor       int              // Selected item cursor
+    entries      []entryWithIndex // Displayed entries with metadata
+    categories   []string         // Available categories
+    // View-specific fields
+    addIP        string          // Add entry: IP field
+    addHostnames string          // Add entry: hostnames field
+    addComment   string          // Add entry: comment field
+    addCategory  string          // Add entry: category field
+    moveEntryIndex    int        // Move entry: source entry index
+    moveCategoryCursor int       // Move entry: target category cursor
+    createCategoryName string    // Create category: name field
+    createCategoryDescription string // Create category: description field
+}
+```
+
+#### TUI Views and Navigation
+- **viewMain**: Main entry listing and navigation
+- **viewSearch**: Real-time search and filtering
+- **viewHelp**: Help and keybinding information
+- **viewAdd**: Add new entry form with multi-field input
+- **viewMove**: Move entry between categories with guided selection
+- **viewCreateCategory**: Create new custom category with name/description
+
+#### Key TUI Controls
+```go
+// Main view navigation
+case "up", "k":     // Navigate up
+case "down", "j":   // Navigate down  
+case " ":           // Toggle entry enabled/disabled
+case "a":           // Add new entry
+case "d":           // Delete selected entry
+case "m":           // Move entry to different category
+case "c":           // Create new category
+case "/":           // Enter search mode
+case "s":           // Save changes
+case "r":           // Refresh entries
+case "?":           // Show help
+case "q":           // Quit application
+```
+
+#### Adding New TUI Features
+1. **Add new view type** to the `view` enum
+2. **Add view-specific fields** to the `model` struct
+3. **Implement view logic** in the `Update()` method
+4. **Add rendering** in the `View()` method
+5. **Update navigation** between views
+6. **Add tests** for new functionality
+
+Example adding a new view:
+```go
+// 1. Add to view enum
+const (
+    viewMain view = iota
+    viewNewFeature  // New view
+)
+
+// 2. Add fields to model
+type model struct {
+    // ... existing fields
+    newFeatureData string
+    newFeatureCursor int
+}
+
+// 3. Handle in Update()
+case viewNewFeature:
+    switch msg := msg.(type) {
+    case tea.KeyMsg:
+        switch msg.String() {
+        case "enter":
+            // Process new feature
+            return m.processNewFeature()
+        }
+    }
+
+// 4. Render in View()
+func (m model) renderNewFeature() string {
+    // Render new feature UI
+}
+```
+
+#### TUI State Management
+- **Entry management**: Track selected entries and modifications
+- **Form validation**: Validate input fields before submission
+- **Error handling**: Display user-friendly error messages
+- **Status feedback**: Show operation results and confirmations
+- **Undo/Redo**: Consider implementing for complex operations
+
+#### TUI Testing Patterns
+```go
+func TestTUIAddEntry(t *testing.T) {
+    model := initialModel()
+    model.currentView = viewAdd
+    model.addIP = "192.168.1.100"
+    model.addHostnames = "test.local"
+    
+    // Simulate Enter key
+    updatedModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+    
+    // Verify entry was added
+    assert.Equal(t, viewMain, updatedModel.(model).currentView)
+    // Additional assertions...
 }
 ```
 
@@ -492,19 +618,61 @@ The codebase now exceeds industry security standards for system utilities handli
 
 ## Release Process
 
-### Version Updates
-Update version in:
-- Git tags (`git tag -a v1.2.3`)
-- Makefile VERSION variable
-- Documentation references
+### Development Versioning (0.x.x)
+The project follows 0.x.x development versioning until the stable 1.0.0 release:
 
-### Build Release
+- **0.x.x releases**: Development versions with evolving features and API changes
+- **Semantic release**: Automated versioning based on conventional commits
+- **feat**: triggers minor version bump (0.1.0 -> 0.2.0)
+- **fix**: triggers patch version bump (0.1.0 -> 0.1.1)
+- **BREAKING CHANGE**: triggers major version bump (0.1.0 -> 1.0.0)
+
+### Automated Release Workflow
+The project uses semantic-release for automated versioning:
+
+1. **Commit with conventional format**: `feat: add new feature`
+2. **Push to main branch**: Triggers semantic-release workflow
+3. **Automatic version bump**: Based on commit message type
+4. **Git tag creation**: Automatically creates version tag (e.g., v0.2.0)
+5. **GitHub release**: Creates release with changelog and binary assets
+6. **Binary distribution**: Builds for all platforms with optimized asset count
+
+### Release Assets (7 total)
+- **Windows**: `hosts-manager-v0.x.x-windows-amd64.zip`
+- **macOS Intel**: `hosts-manager-v0.x.x-darwin-amd64.tar.gz`
+- **macOS ARM**: `hosts-manager-v0.x.x-darwin-arm64.tar.gz`
+- **Linux Intel**: `hosts-manager-v0.x.x-linux-amd64.tar.gz`
+- **Linux ARM**: `hosts-manager-v0.x.x-linux-arm64.tar.gz`
+- **Source tar.gz**: `hosts-manager-v0.x.x-source.tar.gz`
+- **Source zip**: `hosts-manager-v0.x.x-source.zip`
+- **Checksums**: `checksums.txt` (SHA-256 verification)
+
+### Manual Release (Emergency)
 ```bash
 make clean
 make validate
 make release
 make dist
+# Creates dist/ with all platform binaries and source archives
 ```
+
+### Version Detection
+The Makefile automatically detects version from Git tags:
+```makefile
+VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+```
+
+### Conventional Commit Format
+Use these prefixes for automatic version bumps:
+- `feat:` - New features (minor version bump)
+- `fix:` - Bug fixes (patch version bump)
+- `perf:` - Performance improvements (patch version bump)
+- `refactor:` - Code refactoring (patch version bump)
+- `docs:` - Documentation changes (patch version bump)
+- `chore:` - Maintenance tasks (no version bump)
+- `test:` - Test additions/changes (no version bump)
+
+Add `BREAKING CHANGE:` in commit body or `!` after type for major version bump.
 
 ## Debugging Tips
 

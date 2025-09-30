@@ -243,6 +243,8 @@ Category: development
 - Navigate with `↑/↓` or `j/k`
 - Press `Space` to toggle entries enabled/disabled
 - Press `d` to delete entries
+- Press `m` to move entry to different category
+- Press `c` to create new custom category
 - Press `/` to search and filter entries
 - Press `s` to save changes (shows confirmation)
 
@@ -253,6 +255,41 @@ Category: development
 - Status messages show operation results
 - Real-time search filtering
 
+#### Moving Entries Between Categories
+1. Navigate to the entry you want to move
+2. Press `m` to enter move mode
+3. Use `↑/↓` to select target category from the list
+4. Press `Enter` to confirm the move
+5. Press `Esc` to cancel
+
+Example workflow:
+```
+Selected Entry: api.dev (192.168.1.100) [development]
+Available Categories:
+> staging
+  production
+  custom
+  
+Press Enter to move to 'staging' category
+```
+
+#### Creating New Categories
+1. Press `c` to enter create category mode
+2. Enter category name (e.g., "testing")
+3. Press `Tab` to move to description field
+4. Enter description (e.g., "Testing environment hosts")
+5. Press `Enter` to create the category
+6. Press `Esc` to cancel
+
+Example workflow:
+```
+Create New Category
+Name: testing
+Description: Testing environment hosts
+
+Press Enter to create category
+```
+
 ### TUI Best Practices
 
 ```bash
@@ -261,8 +298,10 @@ hosts-manager tui
 # 1. Search for entries: /development
 # 2. Toggle multiple entries with space
 # 3. Add new entries with 'a'
-# 4. Save all changes with 's'
-# 5. Confirm save message appears
+# 4. Move entries between categories with 'm'
+# 5. Create custom categories with 'c'
+# 6. Save all changes with 's'
+# 7. Confirm save message appears
 ```
 
 ## Advanced Use Cases
