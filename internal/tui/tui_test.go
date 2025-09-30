@@ -277,7 +277,7 @@ func TestUpdateMoveExecution(t *testing.T) {
 
 	// Set up move mode
 	m.currentView = viewMove
-	m.moveEntryIndex = 0  // First entry (dev.local in development)
+	m.moveEntryIndex = 0 // First entry (dev.local in development)
 	m.moveCategoryCursor = 0
 	m.moveTargetCategory = "staging"
 
@@ -315,7 +315,7 @@ func TestMainViewMoveActivation(t *testing.T) {
 	m := createTestModel()
 
 	// Test activating move mode with 'm' key
-	m.cursor = 1  // Select second entry
+	m.cursor = 1 // Select second entry
 	newModel, _ := m.updateMain(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	m = newModel.(*model)
 
@@ -823,7 +823,7 @@ func TestCategoryIntegrationWithMove(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		containsHelper(s, substr))))
+			containsHelper(s, substr))))
 }
 
 func containsHelper(s, substr string) bool {
