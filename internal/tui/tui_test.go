@@ -7,7 +7,7 @@ import (
 	"hosts-manager/internal/config"
 	"hosts-manager/internal/hosts"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // createTestModel creates a test model with sample data
