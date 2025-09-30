@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.1](https://github.com/brandonhon/hosts-manager/compare/v0.4.0...v0.4.1) (2025-09-30)
+
+### 🐛 Bug Fixes
+
+* update CI status badge and add configuration validation comment ([6db55c9](https://github.com/brandonhon/hosts-manager/commit/6db55c925cb0d1d5b2918b8e6b41e76558dd290b))
+
 ## [0.4.0](https://github.com/brandonhon/hosts-manager/compare/v0.3.2...v0.4.0) (2025-09-30)
 
 ### 🚀 Features
