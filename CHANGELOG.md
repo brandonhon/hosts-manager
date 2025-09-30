@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.3](https://github.com/brandonhon/hosts-manager/compare/v0.4.2...v0.4.3) (2025-09-30)
+
+### 🐛 Bug Fixes
+
+* resolve Go formatting issues and add golangci-lint version spec ([8661cd5](https://github.com/brandonhon/hosts-manager/commit/8661cd535d924b8fe93f6e228bbcff75b7930a4e))
+
 ## [0.4.2](https://github.com/brandonhon/hosts-manager/compare/v0.4.1...v0.4.2) (2025-09-30)
 
 ### 🐛 Bug Fixes
