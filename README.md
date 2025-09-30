@@ -35,9 +35,9 @@ Download the latest release from the [releases page](https://github.com/brandonh
 #### Linux/macOS
 ```bash
 # Download and install (replace with latest version)
-curl -L -o hosts-manager.tar.gz https://github.com/brandonhon/hosts-manager/releases/latest/download/hosts-manager-linux-amd64.tar.gz
+curl -L -o hosts-manager.tar.gz https://github.com/brandonhon/hosts-manager/releases/latest/download/hosts-manager-v0.2.0-linux-amd64.tar.gz
 tar -xzf hosts-manager.tar.gz
-sudo mv hosts-manager-linux-amd64 /usr/local/bin/hosts-manager
+sudo mv hosts-manager /usr/local/bin/hosts-manager
 chmod +x /usr/local/bin/hosts-manager
 ```
 
@@ -211,11 +211,17 @@ hosts-manager tui
 - `space` - Toggle entry enabled/disabled
 - `a` - Add new entry
 - `d` - Delete entry
+- `m` - Move entry to different category
+- `c` - Create new category
 - `s` - Save changes (shows confirmation)
 - `/` - Search mode
 - `r` - Refresh
 - `?` - Help
 - `q` - Quit
+
+**New TUI Features:**
+- **Move entries**: Use `m` to move selected entry to a different category with guided interface
+- **Create categories**: Use `c` to create new custom categories with name and description
 
 ### Configuration
 
@@ -566,9 +572,13 @@ See the [latest release](https://github.com/brandonhon/hosts-manager/releases/la
 
 ### Development Status
 
-⚠️ **Note**: Despite the version number, this project is under active development. The v1.0.0 release represents a working implementation with comprehensive features, but the API and behavior may still evolve. Consider this a development release suitable for testing and feedback.
+⚠️ **Development Release**: This project is under active development with version 0.x.x releases. The current implementation includes comprehensive features and security hardening, but the API and behavior may still evolve.
 
-Future releases will follow semantic versioning with patch releases (1.0.1, 1.0.2, etc.) for ongoing improvements and minor releases (1.1.0, 1.2.0, etc.) for new features until the API is considered stable.
+**Version Strategy:**
+- **0.x.x releases**: Development versions with evolving features and API changes
+- **1.0.0 release**: Planned stable release with locked API and guaranteed backward compatibility
+
+The project is suitable for testing, development environments, and feedback. Use with caution in production until the 1.0.0 stable release.
 
 ## Support
 
