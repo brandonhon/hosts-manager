@@ -31,6 +31,9 @@ Thumbs.db
 # Coverage reports
 coverage.out
 coverage.html
+coverage_all.out
+*.cover
+*.coverprofile
 
 # Temporary files
 *.tmp
