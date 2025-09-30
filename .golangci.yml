@@ -2,9 +2,6 @@ run:
   timeout: 5m
   tests: true
 
-service:
-  golangci-lint-version: latest # use latest version for Go 1.24 support
-
 linters:
   enable:
     - gosimple
