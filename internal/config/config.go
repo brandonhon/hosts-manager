@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
 	"hosts-manager/pkg/platform"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
