@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.3.0](https://github.com/brandonhon/hosts-manager/compare/v0.2.0...v0.3.0) (2025-09-30)
+
+### 🚀 Features
+
+* optimize release assets to reduce total count ([a350f86](https://github.com/brandonhon/hosts-manager/commit/a350f861aa6c804543311e7450268decdf65a2d5))
+
 ## [0.2.0](https://github.com/brandonhon/hosts-manager/compare/v0.1.9...v0.2.0) (2025-09-30)
 
 ### 🚀 Features
