@@ -2,52 +2,58 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
-## [Unreleased]
+## Development Release Notes
 
-### 🚀 Features
+This project follows a 0.x.x versioning scheme during development. The API and behavior may change between releases until version 1.0.0.
 
-- **security**: comprehensive security hardening and vulnerability fixes
-- **audit**: advanced post-audit improvements and monitoring
-- **build**: enhanced development workflow with comprehensive Makefile targets
-- **ci**: automated release workflow with semantic versioning
-- **release**: multi-platform builds for Linux, macOS, and Windows
+### Upcoming Release (0.2.0)
 
-### 🐛 Bug Fixes
+#### 🚀 New Features
+- **Enhanced TUI Mode**: Added interactive category management
+  - Move entries between categories with guided interface (`m` key)
+  - Create new custom categories with name and description (`c` key)
+  - Improved navigation and user experience
+- **Advanced Security Framework**: Comprehensive security hardening
+  - Input validation and sanitization against injection attacks
+  - Secure file operations with atomic writes and locking
+  - Audit logging with tamper-evident trails
+  - Privilege escalation only when necessary
+- **Cross-Platform Compatibility**: Enhanced Windows support
+  - Platform-specific file locking implementations
+  - Improved permission handling across operating systems
 
-- resolve linting errors and deprecated API usage
-- resolve import cycle and build issues
-- fix gosec security target with proper command syntax
+#### 🐛 Bug Fixes
+- Resolved CI workflow linting and configuration issues
+- Fixed cross-platform build compatibility
+- Improved error handling and user feedback
 
-### ⚡ Performance Improvements
+#### ♻️ Code Refactoring
+- Reorganized TUI code with proper separation of concerns
+- Enhanced test coverage with comprehensive unit tests
+- Improved build system with automated quality gates
 
-- optimized build process with caching and parallel execution
-- enhanced security analysis pipeline with proper fallbacks
-
-### ♻️ Code Refactoring
-
-- implement proper error handling patterns throughout codebase
-- add comprehensive defer patterns for resource cleanup
-- standardize security validation and sanitization
-
-### 📚 Documentation
-
-- comprehensive GitHub Actions workflows for CI/CD
-- detailed contribution guidelines and security documentation
-- extensive examples and installation instructions
-
-### 🛠 Build System
-
-- enhanced Makefile with 40+ development workflow targets
-- automated dependency management and security scanning
-- comprehensive testing and validation pipeline
-
-### ⚙️ Continuous Integration
-
-- multi-platform testing on Linux, macOS, and Windows
-- automated security analysis with gosec and govulncheck
-- dependency review and vulnerability scanning
-- automated release creation with semantic versioning
+#### 🛠 Build System
+- Automated release workflow with semantic versioning
+- Multi-platform binary distribution (Linux, macOS, Windows)
+- Comprehensive linting and security analysis pipeline
 
 ---
 
-*This changelog is automatically generated using [Conventional Commits](https://conventionalcommits.org) and [semantic-release](https://semantic-release.gitbook.io/).*
+### Previous Development History
+
+The project previously used 1.x.x versioning during initial development phases. All previous releases have been reset to establish a proper 0.x.x development versioning scheme leading to a stable 1.0.0 release.
+
+#### Key Milestones Achieved
+- ✅ Complete rewrite in Go with modern architecture
+- ✅ Cross-platform hosts file management
+- ✅ Interactive TUI with Bubble Tea framework
+- ✅ Comprehensive security hardening (A- security rating)
+- ✅ Automated CI/CD pipeline with quality gates
+- ✅ Multi-platform binary distribution
+- ✅ Template system with category management
+- ✅ Backup and restore functionality
+- ✅ Configuration management system
+
+---
+
+*This changelog follows [Conventional Commits](https://conventionalcommits.org) and [Semantic Versioning](https://semver.org/) guidelines.*
