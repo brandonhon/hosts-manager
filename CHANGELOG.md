@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.5.0](https://github.com/brandonhon/hosts-manager/compare/v0.4.7...v0.5.0) (2025-10-01)
+
+### 🚀 Features
+
+* add --version flag to CLI ([467d6e7](https://github.com/brandonhon/hosts-manager/commit/467d6e7b74b2b67b9748fa34686fc0aff2216c6f))
+
 ## [0.4.7](https://github.com/brandonhon/hosts-manager/compare/v0.4.6...v0.4.7) (2025-10-01)
 
 ### 🐛 Bug Fixes
