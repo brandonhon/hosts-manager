@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.4.7](https://github.com/brandonhon/hosts-manager/compare/v0.4.6...v0.4.7) (2025-10-01)
+
+### 🐛 Bug Fixes
+
+* add ProgramData path validation for Windows config directory test ([0f8b92e](https://github.com/brandonhon/hosts-manager/commit/0f8b92efe7c5a44f7afa7bd5e789efb6e545f7e2))
+
 ## [0.4.6](https://github.com/brandonhon/hosts-manager/compare/v0.4.5...v0.4.6) (2025-09-30)
 
 ### 🐛 Bug Fixes
