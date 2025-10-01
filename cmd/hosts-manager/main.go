@@ -43,9 +43,9 @@ func main() {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:     "hosts-manager",
-		Short:   "Cross-platform hosts file manager",
-		Long:    `hosts-manager is a cross-platform CLI tool for managing your hosts file.
+		Use:   "hosts-manager",
+		Short: "Cross-platform hosts file manager",
+		Long: `hosts-manager is a cross-platform CLI tool for managing your hosts file.
 It provides a template system, backup/restore, interactive TUI mode, and more.`,
 		Version: version,
 	}
