@@ -20,7 +20,9 @@ var (
 	cfg     *config.Config
 	verbose bool
 	dryRun  bool
-	version = "dev" // Will be overridden by ldflags during build
+	// version is set via ldflags during build: -X main.version=<version>
+	// Defaults to "dev" for local development builds
+	version = "dev"
 )
 
 func main() {
