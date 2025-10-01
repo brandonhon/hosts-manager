@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.5.1](https://github.com/brandonhon/hosts-manager/compare/v0.5.0...v0.5.1) (2025-10-01)
+
+### 📚 Documentation
+
+* add Global Flags section documenting --version flag ([a1bad31](https://github.com/brandonhon/hosts-manager/commit/a1bad31be577721c8d223b7b51f0cdfe76828e6a))
+
 ## [0.5.0](https://github.com/brandonhon/hosts-manager/compare/v0.4.7...v0.5.0) (2025-10-01)
 
 ### 🚀 Features
