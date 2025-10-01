@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.5.2](https://github.com/brandonhon/hosts-manager/compare/v0.5.1...v0.5.2) (2025-10-01)
+
+### 📚 Documentation
+
+* improve version variable documentation in main.go ([ef6c4b8](https://github.com/brandonhon/hosts-manager/commit/ef6c4b827bf1726ea686e2b361c26fc508002005))
+
 ## [0.5.1](https://github.com/brandonhon/hosts-manager/compare/v0.5.0...v0.5.1) (2025-10-01)
 
 ### 📚 Documentation
