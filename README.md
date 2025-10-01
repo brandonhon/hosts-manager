@@ -81,6 +81,32 @@ hosts-manager --help
 
 ## Usage
 
+### Global Flags
+
+These flags are available for all commands:
+
+```bash
+--version       # Display version information
+--verbose, -v   # Enable verbose output
+--dry-run       # Show what would be done without making changes
+--help, -h      # Show help for any command
+```
+
+Examples:
+```bash
+# Check version
+hosts-manager --version
+
+# See all available commands
+hosts-manager --help
+
+# Preview changes before applying
+hosts-manager add 127.0.0.1 test.local --dry-run
+
+# Get detailed output
+hosts-manager list --verbose
+```
+
 ### Basic Commands
 
 #### Add Entry
