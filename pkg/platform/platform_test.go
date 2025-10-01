@@ -64,6 +64,7 @@ func TestGetConfigDir(t *testing.T) {
 				return strings.Contains(path, "hosts-manager") &&
 					(strings.Contains(path, ".config") ||
 						strings.Contains(path, "AppData") ||
+						strings.Contains(path, "ProgramData") ||
 						strings.Contains(path, "/etc/"))
 			},
 		},
