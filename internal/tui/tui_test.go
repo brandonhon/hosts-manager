@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"hosts-manager/internal/config"
-	"hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/config"
+	"github.com/brandonhon/hosts-manager/internal/hosts"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
