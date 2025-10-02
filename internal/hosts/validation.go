@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"hosts-manager/internal/audit"
+	"github.com/brandonhon/hosts-manager/internal/audit"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/pkg/platform"
 
 	"gopkg.in/yaml.v3"
 )

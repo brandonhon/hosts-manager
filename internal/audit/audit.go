@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode"
 
-	"hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/pkg/platform"
 )
 
 // EventType represents the type of audit event

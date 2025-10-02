@@ -5,13 +5,13 @@ import (
 	"os"
 	"strings"
 
-	"hosts-manager/internal/audit"
-	"hosts-manager/internal/backup"
-	"hosts-manager/internal/config"
-	"hosts-manager/internal/errors"
-	"hosts-manager/internal/hosts"
-	"hosts-manager/pkg/platform"
-	"hosts-manager/pkg/search"
+	"github.com/brandonhon/hosts-manager/internal/audit"
+	"github.com/brandonhon/hosts-manager/internal/backup"
+	"github.com/brandonhon/hosts-manager/internal/config"
+	"github.com/brandonhon/hosts-manager/internal/errors"
+	"github.com/brandonhon/hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/pkg/search"
 
 	"github.com/spf13/cobra"
 )

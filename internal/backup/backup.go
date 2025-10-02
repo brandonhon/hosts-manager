@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"hosts-manager/internal/config"
-	"hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/internal/config"
+	"github.com/brandonhon/hosts-manager/pkg/platform"
 )
 
 type Manager struct {
