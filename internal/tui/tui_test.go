@@ -834,3 +834,264 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestEditEntryActivation(t *testing.T) {
+	m := createTestModel()
+	m.cursor = 0 // Select first entry
+
+	// Test activating edit mode with 'e' key
+	newModel, _ := m.updateMain(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = newModel.(*model)
+
+	if m.currentView != viewEdit {
+		t.Errorf("Expected current view to be viewEdit, got %v", m.currentView)
+	}
+
+	if m.editEntryIndex != 0 {
+		t.Errorf("Expected editEntryIndex to be 0, got %d", m.editEntryIndex)
+	}
+
+	// Check that edit fields are populated with current entry data
+	expectedEntry := m.entries[0].entry
+	if m.editIP != expectedEntry.IP {
+		t.Errorf("Expected editIP to be '%s', got '%s'", expectedEntry.IP, m.editIP)
+	}
+	if m.editHostnames != strings.Join(expectedEntry.Hostnames, " ") {
+		t.Errorf("Expected editHostnames to be '%s', got '%s'", strings.Join(expectedEntry.Hostnames, " "), m.editHostnames)
+	}
+	if m.editComment != expectedEntry.Comment {
+		t.Errorf("Expected editComment to be '%s', got '%s'", expectedEntry.Comment, m.editComment)
+	}
+	if m.editCategory != expectedEntry.Category {
+		t.Errorf("Expected editCategory to be '%s', got '%s'", expectedEntry.Category, m.editCategory)
+	}
+	if m.editField != 0 {
+		t.Errorf("Expected editField to be 0, got %d", m.editField)
+	}
+}
+
+func TestEditEntryActivationNoSelection(t *testing.T) {
+	m := createTestModel()
+	m.entries = []entryWithIndex{} // No entries
+
+	// Test activating edit mode with no entries
+	newModel, _ := m.updateMain(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = newModel.(*model)
+
+	if m.currentView != viewMain {
+		t.Errorf("Expected current view to remain viewMain when no entries, got %v", m.currentView)
+	}
+
+	if m.message != "No entry selected to edit" {
+		t.Errorf("Expected message 'No entry selected to edit', got '%s'", m.message)
+	}
+}
+
+func TestUpdateEditNavigation(t *testing.T) {
+	m := createTestModel()
+	m.currentView = viewEdit
+	m.editField = 0
+
+	// Test Tab navigation
+	newModel, _ := m.updateEdit(tea.KeyMsg{Type: tea.KeyTab})
+	m = newModel.(*model)
+	if m.editField != 1 {
+		t.Errorf("Expected editField to be 1 after Tab, got %d", m.editField)
+	}
+
+	// Test Shift+Tab navigation
+	newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = newModel.(*model)
+	if m.editField != 0 {
+		t.Errorf("Expected editField to be 0 after Shift+Tab, got %d", m.editField)
+	}
+
+	// Test navigation wrap-around with Tab
+	m.editField = 3
+	newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyTab})
+	m = newModel.(*model)
+	if m.editField != 0 {
+		t.Errorf("Expected editField to wrap to 0, got %d", m.editField)
+	}
+
+	// Test Escape to cancel
+	newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyEsc})
+	m = newModel.(*model)
+	if m.currentView != viewMain {
+		t.Errorf("Expected current view to be viewMain after Esc, got %v", m.currentView)
+	}
+}
+
+func TestUpdateEditInput(t *testing.T) {
+	m := createTestModel()
+	m.currentView = viewEdit
+	m.editIP = ""
+	m.editHostnames = ""
+	m.editComment = ""
+	m.editCategory = ""
+
+	// Test IP input (field 0)
+	m.editField = 0
+	newModel, _ := m.updateEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m = newModel.(*model)
+	if m.editIP != "1" {
+		t.Errorf("Expected editIP to be '1', got '%s'", m.editIP)
+	}
+
+	// Test hostname input (field 1) - input characters one by one
+	m.editField = 1
+	for _, char := range "test" {
+		newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
+		m = newModel.(*model)
+	}
+	if m.editHostnames != "test" {
+		t.Errorf("Expected editHostnames to be 'test', got '%s'", m.editHostnames)
+	}
+
+	// Test comment input (field 2) - input characters one by one
+	m.editField = 2
+	for _, char := range "comment" {
+		newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
+		m = newModel.(*model)
+	}
+	if m.editComment != "comment" {
+		t.Errorf("Expected editComment to be 'comment', got '%s'", m.editComment)
+	}
+
+	// Test category input (field 3) - input characters one by one
+	m.editField = 3
+	for _, char := range "dev" {
+		newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
+		m = newModel.(*model)
+	}
+	if m.editCategory != "dev" {
+		t.Errorf("Expected editCategory to be 'dev', got '%s'", m.editCategory)
+	}
+
+	// Test backspace
+	newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = newModel.(*model)
+	if m.editCategory != "de" {
+		t.Errorf("Expected editCategory to be 'de' after backspace, got '%s'", m.editCategory)
+	}
+}
+
+func TestUpdateEditExecution(t *testing.T) {
+	m := createTestModel()
+	m.currentView = viewEdit
+	m.editEntryIndex = 0
+	m.editIP = "10.0.0.1"
+	m.editHostnames = "new.example.com"
+	m.editComment = "Updated comment"
+	m.editCategory = "development"
+
+	// Test successful edit
+	newModel, _ := m.updateEdit(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*model)
+
+	if m.currentView != viewMain {
+		t.Errorf("Expected current view to be viewMain after successful edit, got %v", m.currentView)
+	}
+
+	if m.message != "Entry updated successfully" {
+		t.Errorf("Expected success message, got '%s'", m.message)
+	}
+
+	// Check that entry was actually updated
+	updatedEntry := m.entries[0].entry
+	if updatedEntry.IP != "10.0.0.1" {
+		t.Errorf("Expected updated IP to be '10.0.0.1', got '%s'", updatedEntry.IP)
+	}
+	if len(updatedEntry.Hostnames) != 1 || updatedEntry.Hostnames[0] != "new.example.com" {
+		t.Errorf("Expected updated hostnames to be ['new.example.com'], got %v", updatedEntry.Hostnames)
+	}
+	if updatedEntry.Comment != "Updated comment" {
+		t.Errorf("Expected updated comment to be 'Updated comment', got '%s'", updatedEntry.Comment)
+	}
+}
+
+func TestUpdateEditValidation(t *testing.T) {
+	m := createTestModel()
+	m.currentView = viewEdit
+	m.editEntryIndex = 0
+
+	// Test validation with empty IP
+	m.editIP = ""
+	m.editHostnames = "test.com"
+	m.editComment = ""
+	m.editCategory = "development"
+
+	newModel, _ := m.updateEdit(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*model)
+
+	if m.currentView != viewEdit {
+		t.Errorf("Expected to remain in viewEdit after validation error, got %v", m.currentView)
+	}
+	if m.message != "IP and hostnames are required" {
+		t.Errorf("Expected validation message, got '%s'", m.message)
+	}
+
+	// Test validation with empty hostnames
+	m.editIP = "10.0.0.1"
+	m.editHostnames = ""
+	m.message = "" // Clear previous message
+
+	newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*model)
+
+	if m.currentView != viewEdit {
+		t.Errorf("Expected to remain in viewEdit after validation error, got %v", m.currentView)
+	}
+	if m.message != "IP and hostnames are required" {
+		t.Errorf("Expected validation message, got '%s'", m.message)
+	}
+
+	// Test validation with whitespace-only hostnames
+	m.editHostnames = "   "
+	m.message = "" // Clear previous message
+
+	newModel, _ = m.updateEdit(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*model)
+
+	if m.currentView != viewEdit {
+		t.Errorf("Expected to remain in viewEdit after validation error, got %v", m.currentView)
+	}
+	if m.message != "At least one hostname is required" {
+		t.Errorf("Expected hostname validation message, got '%s'", m.message)
+	}
+}
+
+func TestViewEditRendering(t *testing.T) {
+	m := createTestModel()
+	m.currentView = viewEdit
+	m.editIP = "10.0.0.1"
+	m.editHostnames = "test.example.com"
+	m.editComment = "Test comment"
+	m.editCategory = "development"
+	m.editField = 1 // Select hostnames field
+
+	output := m.viewEdit()
+
+	// Check that the view contains expected content
+	if !strings.Contains(output, "Edit Entry") {
+		t.Errorf("Expected output to contain title 'Edit Entry'")
+	}
+	if !strings.Contains(output, "10.0.0.1") {
+		t.Errorf("Expected output to contain IP '10.0.0.1'")
+	}
+	if !strings.Contains(output, "test.example.com") {
+		t.Errorf("Expected output to contain hostname 'test.example.com'")
+	}
+	if !strings.Contains(output, "Test comment") {
+		t.Errorf("Expected output to contain comment 'Test comment'")
+	}
+	if !strings.Contains(output, "development") {
+		t.Errorf("Expected output to contain category 'development'")
+	}
+	if !strings.Contains(output, "Tab/Shift+Tab") {
+		t.Errorf("Expected output to contain navigation instructions")
+	}
+	if !strings.Contains(output, "Enter to save") {
+		t.Errorf("Expected output to contain save instructions")
+	}
+}

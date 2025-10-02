@@ -87,6 +87,24 @@ sudo hosts-manager add 172.17.0.4 elasticsearch.docker --category development
 sudo hosts-manager add 192.168.65.2 app.docker --category development --comment "Docker Desktop VM"
 ```
 
+### Creating Custom Categories
+
+```bash
+# Create a custom category for specific projects
+sudo hosts-manager category add microservices "Microservices development environment"
+
+# Create categories for different client projects
+sudo hosts-manager category add client-alpha "Client Alpha project hosts"
+sudo hosts-manager category add client-beta "Client Beta project hosts"
+
+# Create environment-specific categories
+sudo hosts-manager category add testing "Integration testing environment"
+sudo hosts-manager category add demo "Demo environment for presentations"
+
+# Verify categories were created
+hosts-manager category list
+```
+
 ### Switching Between Environments
 
 ```bash
@@ -296,12 +314,37 @@ Press Enter to create category
 # Recommended workflow for bulk changes
 hosts-manager tui
 # 1. Search for entries: /development
-# 2. Toggle multiple entries with space
-# 3. Add new entries with 'a'
-# 4. Move entries between categories with 'm'
-# 5. Create custom categories with 'c'
-# 6. Save all changes with 's'
-# 7. Confirm save message appears
+# 2. Navigate with arrow keys or j/k
+# 3. Toggle multiple entries with space
+# 4. Edit existing entries with 'e'
+# 5. Add new entries with 'a'
+# 6. Move entries between categories with 'm'
+# 7. Create custom categories with 'c'
+# 8. Save all changes with 's'
+# 9. Confirm save message appears
+```
+
+**TUI Advanced Workflows:**
+
+```bash
+# Edit existing entries
+hosts-manager tui
+# 1. Find the entry you want to edit
+# 2. Press 'e' to enter edit mode
+# 3. Use Tab/Shift+Tab to navigate between fields:
+#    - IP Address
+#    - Hostnames (space separated)
+#    - Comment (optional)
+#    - Category
+# 4. Press Enter to save changes
+# 5. Press Esc to cancel
+
+# Bulk category management
+hosts-manager tui
+# 1. Create new categories with 'c'
+# 2. Select entries and move them with 'm'
+# 3. Use search ('/') to filter entries
+# 4. Save all changes with 's'
 ```
 
 ## Advanced Use Cases

@@ -425,3 +425,23 @@ func (hf *HostsFile) DisableCategory(name string) {
 		}
 	}
 }
+
+func (hf *HostsFile) AddCategory(name, description string) error {
+	if err := validateCategoryName(name); err != nil {
+		return fmt.Errorf("category name validation failed: %w", err)
+	}
+
+	if hf.GetCategory(name) != nil {
+		return fmt.Errorf("category '%s' already exists", name)
+	}
+
+	newCategory := Category{
+		Name:        name,
+		Description: description,
+		Enabled:     true,
+		Entries:     []Entry{},
+	}
+
+	hf.Categories = append(hf.Categories, newCategory)
+	return nil
+}
