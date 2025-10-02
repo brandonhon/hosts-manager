@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.6.0](https://github.com/brandonhon/hosts-manager/compare/v0.5.2...v0.6.0) (2025-10-02)
+
+### 🚀 Features
+
+* add CLI category creation and TUI entry editing ([839582d](https://github.com/brandonhon/hosts-manager/commit/839582db90d847cb43a5205bcad71cd8e9643b1b))
+
+### 🐛 Bug Fixes
+
+* resolve CLI test failures and update TUI controls display ([a24bfe3](https://github.com/brandonhon/hosts-manager/commit/a24bfe3471053ebd1175d08c905ad47a3370c743))
+* resolve root user test failures and enhance TUI controls display ([67646ab](https://github.com/brandonhon/hosts-manager/commit/67646aba36d37cf5c69425767ec90c2b714a3a4f))
+* skip flaky concurrent test on Windows CI ([2edf98a](https://github.com/brandonhon/hosts-manager/commit/2edf98ac5f8f274d4a24ec8ae4c6051691c76848))
+
 ## [0.5.2](https://github.com/brandonhon/hosts-manager/compare/v0.5.1...v0.5.2) (2025-10-01)
 
 ### 📚 Documentation
