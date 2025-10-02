@@ -1363,6 +1363,11 @@ func TestHostsFileEdgeCases(t *testing.T) {
 			t.Skip("Skipping read-only directory test on Windows")
 		}
 
+		// Skip this test when running as root, since root can write to read-only directories
+		if os.Getuid() == 0 {
+			t.Skip("Skipping read-only directory test when running as root")
+		}
+
 		tmpDir := createTestHostsDir(t)
 		defer func() { _ = os.RemoveAll(tmpDir) }()
 

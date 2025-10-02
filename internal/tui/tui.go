@@ -109,7 +109,81 @@ var (
 			Foreground(lipgloss.Color("208")).
 			Background(lipgloss.Color("53")).
 			Bold(true)
+
+	keyStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("76")).
+			Bold(true)
+
+	actionStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241"))
 )
+
+// controlsView returns a nicely formatted help section for key bindings
+func controlsView() string {
+	// Define key-action pairs with fixed widths for alignment
+	controls := []struct {
+		key    string
+		action string
+		width  int
+	}{
+		{"Space", "Toggle", 19},
+		{"a", "Add", 12},
+		{"e", "Edit", 13},
+		{"c", "Create Category", 0},
+		{"m", "Move", 19},
+		{"d", "Delete", 12},
+		{"s", "Save", 13},
+		{"/", "Search", 0},
+		{"?", "Help", 19},
+		{"q", "Quit", 0},
+	}
+
+	// Create formatted control strings with fixed widths for alignment
+	var row1Items []string
+	var row2Items []string
+	var row3Items []string
+
+	// Distribute controls across 3 rows
+	for i, ctrl := range controls {
+		formatted := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			keyStyle.Render("["+ctrl.key+"]"),
+			" ",
+			actionStyle.Render(ctrl.action),
+		)
+
+		// Add padding to align columns
+		if ctrl.width > 0 {
+			currentWidth := lipgloss.Width(formatted)
+			if currentWidth < ctrl.width {
+				formatted = formatted + strings.Repeat(" ", ctrl.width-currentWidth)
+			}
+		}
+
+		// Distribute into rows
+		if i < 4 {
+			row1Items = append(row1Items, formatted)
+		} else if i < 8 {
+			row2Items = append(row2Items, formatted)
+		} else {
+			row3Items = append(row3Items, formatted)
+		}
+	}
+
+	// Add indentation for alignment
+	indent := "  "
+
+	// Join items in each row
+	row1 := indent + lipgloss.JoinHorizontal(lipgloss.Left, row1Items...)
+	row2 := indent + lipgloss.JoinHorizontal(lipgloss.Left, row2Items...)
+	row3 := indent + lipgloss.JoinHorizontal(lipgloss.Left, row3Items...)
+
+	// Create header
+	header := "Controls:"
+
+	// Join rows vertically with header
+	return lipgloss.JoinVertical(lipgloss.Left, header, row1, row2, row3)
+}
 
 func Run(hostsFile *hosts.HostsFile, cfg *config.Config) error {
 	m := model{
@@ -911,7 +985,8 @@ func (m *model) viewMain() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("\nControls: space=toggle, a=add, e=edit, c=create category, m=move, d=delete, s=save, /=search, ?=help, q=quit"))
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render(controlsView()))
 
 	return b.String()
 }
