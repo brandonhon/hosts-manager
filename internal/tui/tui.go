@@ -911,7 +911,7 @@ func (m *model) viewMain() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("\nControls: space=toggle, a=add, c=create category, m=move, d=delete, s=save, /=search, ?=help, q=quit"))
+	b.WriteString(helpStyle.Render("\nControls: space=toggle, a=add, e=edit, c=create category, m=move, d=delete, s=save, /=search, ?=help, q=quit"))
 
 	return b.String()
 }
