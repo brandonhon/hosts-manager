@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hosts-manager/internal/audit"
-	"hosts-manager/internal/backup"
-	"hosts-manager/internal/config"
-	"hosts-manager/internal/hosts"
-	"hosts-manager/internal/tui"
-	"hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/internal/audit"
+	"github.com/brandonhon/hosts-manager/internal/backup"
+	"github.com/brandonhon/hosts-manager/internal/config"
+	"github.com/brandonhon/hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/tui"
+	"github.com/brandonhon/hosts-manager/pkg/platform"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"

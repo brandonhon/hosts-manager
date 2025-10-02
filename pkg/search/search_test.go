@@ -3,7 +3,7 @@ package search
 import (
 	"testing"
 
-	"hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/hosts"
 )
 
 func createTestHostsFile() *hosts.HostsFile {

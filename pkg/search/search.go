@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/hosts"
 )
 
 type Result struct {

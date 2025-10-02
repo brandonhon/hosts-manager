@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"hosts-manager/internal/config"
+	"github.com/brandonhon/hosts-manager/internal/config"
 )
 
 func createTestConfig(tempDir string) *config.Config {

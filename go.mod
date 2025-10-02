@@ -1,4 +1,4 @@
-module hosts-manager
+module github.com/brandonhon/hosts-manager
 
 go 1.24.0
 
