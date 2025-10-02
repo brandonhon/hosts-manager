@@ -38,6 +38,13 @@ type model struct {
 	createCategoryName        string // Name of new category to create
 	createCategoryDescription string // Description of new category
 	createCategoryField       int    // 0=name, 1=description
+	// Edit entry fields
+	editEntryIndex int    // Index of entry being edited
+	editIP         string // IP being edited
+	editHostnames  string // Hostnames being edited
+	editComment    string // Comment being edited
+	editCategory   string // Category being edited
+	editField      int    // 0=IP, 1=hostnames, 2=comment, 3=category
 }
 
 type view int
@@ -49,6 +56,7 @@ const (
 	viewAdd
 	viewMove
 	viewCreateCategory
+	viewEdit
 )
 
 type entryWithIndex struct {
@@ -166,6 +174,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateMove(msg)
 		case viewCreateCategory:
 			return m.updateCreateCategory(msg)
+		case viewEdit:
+			return m.updateEdit(msg)
 		}
 
 	case errorMsg:
@@ -269,6 +279,20 @@ func (m *model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.createCategoryName = ""
 		m.createCategoryDescription = ""
 		m.createCategoryField = 0
+
+	case "e":
+		if m.cursor < len(m.entries) {
+			m.currentView = viewEdit
+			m.editEntryIndex = m.cursor
+			entry := m.entries[m.cursor].entry
+			m.editIP = entry.IP
+			m.editHostnames = strings.Join(entry.Hostnames, " ")
+			m.editComment = entry.Comment
+			m.editCategory = entry.Category
+			m.editField = 0
+		} else {
+			m.message = "No entry selected to edit"
+		}
 
 	case "m":
 		if m.cursor < len(m.entries) {
@@ -517,6 +541,114 @@ func (m *model) updateCreateCategory(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.currentView = viewMain
+
+	case "tab", "down":
+		m.editField = (m.editField + 1) % 4
+
+	case "shift+tab", "up":
+		m.editField = (m.editField + 3) % 4
+
+	case "enter":
+		// Validate and update the entry
+		if m.editIP == "" || m.editHostnames == "" {
+			m.message = "IP and hostnames are required"
+			return m, nil
+		}
+
+		// Split hostnames by space
+		hostnames := strings.Fields(m.editHostnames)
+		if len(hostnames) == 0 {
+			m.message = "At least one hostname is required"
+			return m, nil
+		}
+
+		// Find the entry in the hosts file and update it
+		entryWithIndex := m.entries[m.editEntryIndex]
+		category := m.hostsFile.GetCategory(entryWithIndex.category)
+		if category != nil {
+			for i := range category.Entries {
+				// Match by IP and first hostname for reliable identification
+				if category.Entries[i].IP == entryWithIndex.entry.IP &&
+					len(category.Entries[i].Hostnames) > 0 &&
+					len(entryWithIndex.entry.Hostnames) > 0 &&
+					category.Entries[i].Hostnames[0] == entryWithIndex.entry.Hostnames[0] {
+
+					// Update the entry
+					category.Entries[i].IP = m.editIP
+					category.Entries[i].Hostnames = hostnames
+					category.Entries[i].Comment = m.editComment
+
+					// If category changed, move the entry to the new category
+					if m.editCategory != entryWithIndex.category {
+						// Remove from current category
+						category.Entries = append(category.Entries[:i], category.Entries[i+1:]...)
+
+						// Add to new category
+						newEntry := hosts.Entry{
+							IP:        m.editIP,
+							Hostnames: hostnames,
+							Comment:   m.editComment,
+							Category:  m.editCategory,
+							Enabled:   entryWithIndex.entry.Enabled,
+						}
+
+						if err := m.hostsFile.AddEntry(newEntry); err != nil {
+							m.message = fmt.Sprintf("Error moving entry to new category: %v", err)
+							return m, nil
+						}
+					}
+					break
+				}
+			}
+		}
+
+		// Refresh entries and go back to main view
+		m.entries = buildEntryList(m.hostsFile)
+		m.message = "Entry updated successfully"
+		m.currentView = viewMain
+
+	case "backspace":
+		switch m.editField {
+		case 0: // IP
+			if len(m.editIP) > 0 {
+				m.editIP = m.editIP[:len(m.editIP)-1]
+			}
+		case 1: // Hostnames
+			if len(m.editHostnames) > 0 {
+				m.editHostnames = m.editHostnames[:len(m.editHostnames)-1]
+			}
+		case 2: // Comment
+			if len(m.editComment) > 0 {
+				m.editComment = m.editComment[:len(m.editComment)-1]
+			}
+		case 3: // Category
+			if len(m.editCategory) > 0 {
+				m.editCategory = m.editCategory[:len(m.editCategory)-1]
+			}
+		}
+
+	default:
+		if len(msg.String()) == 1 {
+			switch m.editField {
+			case 0: // IP
+				m.editIP += msg.String()
+			case 1: // Hostnames
+				m.editHostnames += msg.String()
+			case 2: // Comment
+				m.editComment += msg.String()
+			case 3: // Category
+				m.editCategory += msg.String()
+			}
+		}
+	}
+
+	return m, nil
+}
+
 // validateCategoryName validates a category name using the same rules as the config validator
 func (m *model) validateCategoryName(name string) error {
 	if name == "" {
@@ -710,6 +842,8 @@ func (m *model) View() string {
 		return m.viewMove()
 	case viewCreateCategory:
 		return m.viewCreateCategory()
+	case viewEdit:
+		return m.viewEdit()
 	}
 
 	return ""
@@ -815,6 +949,7 @@ Actions:
   space     Toggle entry enabled/disabled
   a         Add new entry
   c         Create new category
+  e         Edit selected entry
   m         Move entry to different category
   d         Delete entry
   s         Save changes to hosts file
@@ -952,6 +1087,53 @@ func (m *model) viewCreateCategory() string {
 	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Press Enter to create category, Esc to cancel"))
+
+	return b.String()
+}
+
+func (m *model) viewEdit() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Edit Entry"))
+	b.WriteString("\n\n")
+
+	// IP field
+	ipLabel := "IP Address:"
+	if m.editField == 0 {
+		ipLabel = selectedStyle.Render("IP Address:")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", ipLabel, m.editIP))
+
+	// Hostnames field
+	hostnamesLabel := "Hostnames (space separated):"
+	if m.editField == 1 {
+		hostnamesLabel = selectedStyle.Render("Hostnames (space separated):")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", hostnamesLabel, m.editHostnames))
+
+	// Comment field
+	commentLabel := "Comment (optional):"
+	if m.editField == 2 {
+		commentLabel = selectedStyle.Render("Comment (optional):")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", commentLabel, m.editComment))
+
+	// Category field
+	categoryLabel := "Category:"
+	if m.editField == 3 {
+		categoryLabel = selectedStyle.Render("Category:")
+	}
+	b.WriteString(fmt.Sprintf("%s %s\n", categoryLabel, m.editCategory))
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Press Enter to save changes, Esc to cancel"))
+
+	if m.message != "" {
+		b.WriteString("\n\n")
+		b.WriteString(errorStyle.Render(m.message))
+	}
 
 	return b.String()
 }

@@ -353,6 +353,7 @@ func categoryCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(categoryListCmd())
+	cmd.AddCommand(categoryAddCmd())
 	cmd.AddCommand(categoryEnableCmd())
 	cmd.AddCommand(categoryDisableCmd())
 
@@ -385,6 +386,68 @@ func categoryListCmd() *cobra.Command {
 				fmt.Println()
 			}
 
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func categoryAddCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add <name> [description]",
+		Short: "Add a new category",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := platform.New()
+			if err := p.ElevateIfNeeded(); err != nil {
+				return err
+			}
+
+			parser := hosts.NewParser(p.GetHostsFilePath())
+			hostsFile, err := parser.Parse()
+			if err != nil {
+				return fmt.Errorf("failed to parse hosts file: %w", err)
+			}
+
+			categoryName := args[0]
+			description := ""
+			if len(args) > 1 {
+				description = args[1]
+			}
+
+			backupMgr := backup.NewManager(cfg)
+			if cfg.General.AutoBackup {
+				if _, err := backupMgr.CreateBackup(); err != nil {
+					return fmt.Errorf("failed to create backup: %w", err)
+				}
+				if verbose {
+					fmt.Println("Backup created successfully")
+				}
+			}
+
+			if dryRun {
+				fmt.Printf("Would add category: %s", categoryName)
+				if description != "" {
+					fmt.Printf(" - %s", description)
+				}
+				fmt.Println()
+				return nil
+			}
+
+			if err := hostsFile.AddCategory(categoryName, description); err != nil {
+				return fmt.Errorf("failed to add category: %w", err)
+			}
+
+			if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
+				return fmt.Errorf("failed to write hosts file: %w", err)
+			}
+
+			fmt.Printf("Added category: %s", categoryName)
+			if description != "" {
+				fmt.Printf(" - %s", description)
+			}
+			fmt.Println()
 			return nil
 		},
 	}

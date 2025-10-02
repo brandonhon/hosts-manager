@@ -183,6 +183,15 @@ hosts-manager restore hosts.backup.2023-12-07T10-30-45
 hosts-manager category list
 ```
 
+#### Add New Category
+```bash
+# Add category with name only
+hosts-manager category add testing
+
+# Add category with name and description
+hosts-manager category add testing "Testing environment hosts"
+```
+
 #### Enable/Disable Category
 ```bash
 hosts-manager category enable development
@@ -236,6 +245,7 @@ hosts-manager tui
 - `↑/↓` or `k/j` - Navigate entries
 - `space` - Toggle entry enabled/disabled
 - `a` - Add new entry
+- `e` - Edit selected entry
 - `d` - Delete entry
 - `m` - Move entry to different category
 - `c` - Create new category
@@ -245,7 +255,8 @@ hosts-manager tui
 - `?` - Help
 - `q` - Quit
 
-**New TUI Features:**
+**Advanced TUI Features:**
+- **Edit entries**: Use `e` to edit the selected entry's IP, hostnames, comment, and category
 - **Move entries**: Use `m` to move selected entry to a different category with guided interface
 - **Create categories**: Use `c` to create new custom categories with name and description
 

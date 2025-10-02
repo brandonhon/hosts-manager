@@ -1472,3 +1472,209 @@ func createTestHostsFileB(b *testing.B, content string) string {
 
 	return tmpFile.Name()
 }
+
+func TestHostsFileAddCategory(t *testing.T) {
+	tests := []struct {
+		name          string
+		categoryName  string
+		description   string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "Valid category with description",
+			categoryName: "testing",
+			description:  "Testing category",
+			expectError:  false,
+		},
+		{
+			name:         "Valid category without description",
+			categoryName: "minimal",
+			description:  "",
+			expectError:  false,
+		},
+		{
+			name:          "Empty category name",
+			categoryName:  "",
+			description:   "Should fail",
+			expectError:   true,
+			errorContains: "validation failed",
+		},
+		{
+			name:          "Invalid category name with spaces",
+			categoryName:  "test category",
+			description:   "Should fail",
+			expectError:   true,
+			errorContains: "validation failed",
+		},
+		{
+			name:          "Invalid category name with special chars",
+			categoryName:  "test@category",
+			description:   "Should fail",
+			expectError:   true,
+			errorContains: "validation failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test hosts file
+			hostsPath := createTestHostsFile(t, sampleHostsContent)
+			defer func() { _ = os.Remove(hostsPath) }()
+
+			// Parse the hosts file
+			parser := NewParser(hostsPath)
+			hostsFile, err := parser.Parse()
+			if err != nil {
+				t.Fatalf("Failed to parse hosts file: %v", err)
+			}
+
+			// Check initial state
+			initialCategoryCount := len(hostsFile.Categories)
+
+			// Test duplicate category (should fail)
+			if tt.categoryName == "development" {
+				err := hostsFile.AddCategory(tt.categoryName, tt.description)
+				if err == nil {
+					t.Errorf("Expected error for duplicate category, got nil")
+				}
+				if !strings.Contains(err.Error(), "already exists") {
+					t.Errorf("Expected 'already exists' error, got: %v", err)
+				}
+				return
+			}
+
+			// Add the category
+			err = hostsFile.AddCategory(tt.categoryName, tt.description)
+
+			// Check error expectation
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+					return
+				}
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errorContains, err)
+				}
+				return
+			}
+
+			// Should not have error
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			// Verify category was added
+			if len(hostsFile.Categories) != initialCategoryCount+1 {
+				t.Errorf("Expected %d categories, got %d", initialCategoryCount+1, len(hostsFile.Categories))
+			}
+
+			// Find the added category
+			var addedCategory *Category
+			for i := range hostsFile.Categories {
+				if hostsFile.Categories[i].Name == tt.categoryName {
+					addedCategory = &hostsFile.Categories[i]
+					break
+				}
+			}
+
+			if addedCategory == nil {
+				t.Errorf("Category '%s' was not added", tt.categoryName)
+				return
+			}
+
+			// Verify category properties
+			if addedCategory.Name != tt.categoryName {
+				t.Errorf("Expected category name '%s', got '%s'", tt.categoryName, addedCategory.Name)
+			}
+			if addedCategory.Description != tt.description {
+				t.Errorf("Expected category description '%s', got '%s'", tt.description, addedCategory.Description)
+			}
+			if !addedCategory.Enabled {
+				t.Errorf("Expected category to be enabled by default")
+			}
+			if len(addedCategory.Entries) != 0 {
+				t.Errorf("Expected category to have no entries initially, got %d", len(addedCategory.Entries))
+			}
+		})
+	}
+}
+
+func TestHostsFileAddCategoryDuplicate(t *testing.T) {
+	// Create a test hosts file
+	hostsPath := createTestHostsFile(t, sampleHostsContent)
+	defer func() { _ = os.Remove(hostsPath) }()
+
+	// Parse the hosts file
+	parser := NewParser(hostsPath)
+	hostsFile, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Failed to parse hosts file: %v", err)
+	}
+
+	// Try to add a category that already exists
+	err = hostsFile.AddCategory("development", "Duplicate category")
+	if err == nil {
+		t.Errorf("Expected error for duplicate category, got nil")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Expected 'already exists' error, got: %v", err)
+	}
+}
+
+func TestHostsFileAddCategoryAndWrite(t *testing.T) {
+	// Create a test hosts file
+	hostsPath := createTestHostsFile(t, sampleHostsContent)
+	defer func() { _ = os.Remove(hostsPath) }()
+
+	// Parse the hosts file
+	parser := NewParser(hostsPath)
+	hostsFile, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("Failed to parse hosts file: %v", err)
+	}
+
+	// Add a new category
+	err = hostsFile.AddCategory("testing", "Testing category for persistence")
+	if err != nil {
+		t.Fatalf("Failed to add category: %v", err)
+	}
+
+	// Add an entry to the new category so it gets written to the file
+	testEntry := Entry{
+		IP:        "192.168.1.200",
+		Hostnames: []string{"test.local"},
+		Comment:   "Test entry",
+		Category:  "testing",
+		Enabled:   true,
+	}
+	err = hostsFile.AddEntry(testEntry)
+	if err != nil {
+		t.Fatalf("Failed to add test entry: %v", err)
+	}
+
+	// Write the hosts file
+	err = hostsFile.Write(hostsPath)
+	if err != nil {
+		t.Fatalf("Failed to write hosts file: %v", err)
+	}
+
+	// Re-parse the file to verify persistence
+	parser2 := NewParser(hostsPath)
+	hostsFile2, err := parser2.Parse()
+	if err != nil {
+		t.Fatalf("Failed to re-parse hosts file: %v", err)
+	}
+
+	// Verify the category exists in the re-parsed file
+	testingCategory := hostsFile2.GetCategory("testing")
+	if testingCategory == nil {
+		t.Errorf("Category 'testing' not found after write/read cycle")
+		return
+	}
+
+	if testingCategory.Description != "Testing category for persistence" {
+		t.Errorf("Expected description 'Testing category for persistence', got '%s'", testingCategory.Description)
+	}
+}

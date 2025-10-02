@@ -135,9 +135,22 @@ func newCmd() *cobra.Command {
 4. Document in README.md
 
 ### Adding New Categories
+
+**For programmatic categories (constants):**
 1. Add constant to `internal/hosts/types.go`
 2. Update default config in `internal/config/config.go`
 3. Document in user documentation
+
+**For dynamic categories (CLI and TUI):**
+Categories can now be created dynamically using:
+- **CLI**: `hosts-manager category add <name> [description]`
+- **TUI**: Press 'c' in the main view to create categories interactively
+
+**Implementation details:**
+- `AddCategory()` method in `internal/hosts/parser.go` handles category creation
+- Categories are validated using `validateCategoryName()` function
+- Empty categories are not written to hosts file (only categories with entries persist)
+- Both CLI and TUI support category creation with optional descriptions
 
 ### Platform-Specific Code
 Use the platform abstraction:
@@ -173,6 +186,11 @@ type model struct {
     moveCategoryCursor int       // Move entry: target category cursor
     createCategoryName string    // Create category: name field
     createCategoryDescription string // Create category: description field
+    editEntryIndex    int        // Edit entry: index of entry being edited
+    editIP           string      // Edit entry: IP field
+    editHostnames    string      // Edit entry: hostnames field
+    editComment      string      // Edit entry: comment field
+    editCategory     string      // Edit entry: category field
 }
 ```
 
@@ -181,6 +199,7 @@ type model struct {
 - **viewSearch**: Real-time search and filtering
 - **viewHelp**: Help and keybinding information
 - **viewAdd**: Add new entry form with multi-field input
+- **viewEdit**: Edit existing entry with all fields (IP, hostnames, comment, category)
 - **viewMove**: Move entry between categories with guided selection
 - **viewCreateCategory**: Create new custom category with name/description
 
@@ -191,6 +210,7 @@ case "up", "k":     // Navigate up
 case "down", "j":   // Navigate down  
 case " ":           // Toggle entry enabled/disabled
 case "a":           // Add new entry
+case "e":           // Edit selected entry
 case "d":           // Delete selected entry
 case "m":           // Move entry to different category
 case "c":           // Create new category
