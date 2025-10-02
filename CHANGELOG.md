@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.6.1](https://github.com/brandonhon/hosts-manager/compare/v0.6.0...v0.6.1) (2025-10-02)
+
+### 🐛 Bug Fixes
+
+* update module path to github.com/brandonhon/hosts-manager ([0e5313f](https://github.com/brandonhon/hosts-manager/commit/0e5313facf5c4fe35541c2e953b6f4ecce70fbd1))
+
 ## [0.6.0](https://github.com/brandonhon/hosts-manager/compare/v0.5.2...v0.6.0) (2025-10-02)
 
 ### 🚀 Features
