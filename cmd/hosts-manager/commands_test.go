@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/brandonhon/hosts-manager/internal/cli"
-	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
 )
 
@@ -165,6 +164,7 @@ func TestAddEntry(t *testing.T) {
 				IP:        tt.ip,
 				Hostnames: tt.hostnames,
 				Comment:   tt.comment,
+				Category:  tt.category,
 				Enabled:   true,
 			}
 
@@ -185,7 +185,7 @@ func TestAddEntry(t *testing.T) {
 				}
 			}
 
-			err := hf.AddEntry(entry, tt.category)
+			err := hf.AddEntry(entry)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AddEntry() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -213,9 +213,8 @@ func TestDeleteEntry(t *testing.T) {
 
 	// Delete entry
 	hf := ctx.ParseHostsFile()
-	err := hf.RemoveEntry("127.0.0.1", "dev.local")
-	if err != nil {
-		t.Fatalf("RemoveEntry() error = %v", err)
+	if !hf.RemoveEntry("dev.local") {
+		t.Fatal("RemoveEntry() = false, want true")
 	}
 
 	ctx.WriteHostsFileFromStruct(hf)
@@ -445,8 +444,10 @@ func TestBackupRestore(t *testing.T) {
 	entry := hosts.Entry{
 		IP:        "10.0.0.1",
 		Hostnames: []string{"newhost.local"},
+		Category:  "development",
+		Enabled:   true,
 	}
-	if err := hf.AddEntry(entry, "development"); err != nil {
+	if err := hf.AddEntry(entry); err != nil {
 		t.Fatalf("AddEntry() error = %v", err)
 	}
 	ctx.WriteHostsFileFromStruct(hf)
@@ -513,7 +514,7 @@ func TestConfigOperations(t *testing.T) {
 		}
 
 		// Check default categories exist
-		if len(cfg.DefaultCategories) == 0 {
+		if len(cfg.Categories) == 0 {
 			t.Error("Default categories should not be empty")
 		}
 	})
@@ -522,24 +523,13 @@ func TestConfigOperations(t *testing.T) {
 		cfg := ctx.LoadConfig()
 
 		// Add custom category to config
-		cfg.DefaultCategories = append(cfg.DefaultCategories, config.CategoryConfig{
-			Name:        "custom-test",
-			Description: "Custom test category",
-		})
+		cfg.Categories["custom-test"] = "Custom test category"
 
 		ctx.WriteConfig(cfg)
 
 		// Reload and verify
 		reloaded := ctx.LoadConfig()
-		found := false
-		for _, cat := range reloaded.DefaultCategories {
-			if cat.Name == "custom-test" {
-				found = true
-				break
-			}
-		}
-
-		if !found {
+		if _, found := reloaded.Categories["custom-test"]; !found {
 			t.Error("Custom category not found in reloaded config")
 		}
 	})
