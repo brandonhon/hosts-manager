@@ -19,19 +19,22 @@ func (e ValidationError) Error() string {
 
 // ConfigValidator validates configuration values
 type ConfigValidator struct {
-	errors []ValidationError
+	errors   []ValidationError
+	warnings []string
 }
 
 // NewValidator creates a new configuration validator
 func NewValidator() *ConfigValidator {
 	return &ConfigValidator{
-		errors: make([]ValidationError, 0),
+		errors:   make([]ValidationError, 0),
+		warnings: make([]string, 0),
 	}
 }
 
 // Validate validates the entire configuration
 func (v *ConfigValidator) Validate(config *Config) error {
 	v.errors = make([]ValidationError, 0)
+	v.warnings = make([]string, 0)
 
 	// Validate General section
 	v.validateGeneral(&config.General)
@@ -68,9 +71,12 @@ func (v *ConfigValidator) validateGeneral(general *General) {
 		v.addError("general.default_category", general.DefaultCategory, "invalid category name format")
 	}
 
-	// Validate editor
+	// An unrecognized editor is a warning, not an error. It affects only
+	// `config --edit`, which re-checks the editor and refuses to launch an
+	// unrecognized one. Rejecting it here would make an unusable $EDITOR
+	// abort config loading, and with it every command the tool offers.
 	if general.Editor != "" && !isValidEditor(general.Editor) {
-		v.addError("general.editor", general.Editor, "invalid or potentially unsafe editor")
+		v.addWarning("general.editor: %q is not a recognized editor; `hosts-manager config --edit` will refuse to launch it", general.Editor)
 	}
 }
 
@@ -222,6 +228,16 @@ func (v *ConfigValidator) addError(field string, value interface{}, message stri
 		Value:   value,
 		Message: message,
 	})
+}
+
+func (v *ConfigValidator) addWarning(format string, args ...interface{}) {
+	v.warnings = append(v.warnings, fmt.Sprintf(format, args...))
+}
+
+// Warnings returns the non-fatal issues found by the most recent Validate
+// call. Unlike errors these do not prevent the configuration from loading.
+func (v *ConfigValidator) Warnings() []string {
+	return v.warnings
 }
 
 func isValidCategoryName(name string) bool {
