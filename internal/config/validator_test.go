@@ -43,10 +43,12 @@ func TestValidateValidConfig(t *testing.T) {
 
 func TestValidateGeneral(t *testing.T) {
 	tests := []struct {
-		name          string
-		general       General
-		expectError   bool
-		errorContains string
+		name            string
+		general         General
+		expectError     bool
+		errorContains   string
+		expectWarning   bool
+		warningContains string
 	}{
 		{
 			name: "valid general config",
@@ -78,13 +80,26 @@ func TestValidateGeneral(t *testing.T) {
 			errorContains: "invalid category name format",
 		},
 		{
-			name: "invalid editor",
+			// Unrecognized editors must not block config loading: enforcement
+			// lives at `config --edit`, which refuses to launch them.
+			name: "unrecognized editor warns but does not fail",
 			general: General{
 				DefaultCategory: "custom",
 				Editor:          "malicious_command; rm -rf /",
 			},
-			expectError:   true,
-			errorContains: "invalid or potentially unsafe editor",
+			expectError:     false,
+			expectWarning:   true,
+			warningContains: "is not a recognized editor",
+		},
+		{
+			name: "unrecognized but harmless editor warns but does not fail",
+			general: General{
+				DefaultCategory: "custom",
+				Editor:          "nvim",
+			},
+			expectError:     false,
+			expectWarning:   true,
+			warningContains: "nvim",
 		},
 		{
 			name: "valid editor with arguments",
@@ -112,6 +127,19 @@ func TestValidateGeneral(t *testing.T) {
 			if tt.expectError && err != nil && tt.errorContains != "" {
 				if !strings.Contains(err.Error(), tt.errorContains) {
 					t.Errorf("Expected error to contain '%s', got '%s'", tt.errorContains, err.Error())
+				}
+			}
+
+			warnings := validator.Warnings()
+			if tt.expectWarning && len(warnings) == 0 {
+				t.Error("Expected a validation warning but got none")
+			}
+			if !tt.expectWarning && len(warnings) > 0 {
+				t.Errorf("Expected no warnings but got: %v", warnings)
+			}
+			if tt.expectWarning && tt.warningContains != "" {
+				if !strings.Contains(strings.Join(warnings, "\n"), tt.warningContains) {
+					t.Errorf("Expected warning to contain '%s', got %v", tt.warningContains, warnings)
 				}
 			}
 		})
@@ -769,9 +797,9 @@ func TestMultipleValidationErrors(t *testing.T) {
 
 	// Create config with multiple validation errors
 	config.General.DefaultCategory = ""      // Error 1: empty category
-	config.General.Editor = "evil; rm -rf /" // Error 2: unsafe editor
-	config.UI.PageSize = 0                   // Error 3: invalid page size
-	config.Backup.MaxBackups = 0             // Error 4: invalid max backups
+	config.UI.PageSize = 0                   // Error 2: invalid page size
+	config.Backup.MaxBackups = 0             // Error 3: invalid max backups
+	config.General.Editor = "evil; rm -rf /" // Warning, not an error
 
 	validator := NewValidator()
 	err := validator.Validate(config)
@@ -782,8 +810,15 @@ func TestMultipleValidationErrors(t *testing.T) {
 
 	// Check that error mentions multiple validation errors
 	errorStr := err.Error()
-	if !strings.Contains(errorStr, "4 errors") {
-		t.Errorf("Expected error to mention 4 validation errors, got: %s", errorStr)
+	if !strings.Contains(errorStr, "3 errors") {
+		t.Errorf("Expected error to mention 3 validation errors, got: %s", errorStr)
+	}
+
+	// The unrecognized editor is reported separately and does not inflate the
+	// error count, so a bad editor cannot on its own fail validation.
+	warnings := validator.Warnings()
+	if len(warnings) != 1 {
+		t.Errorf("Expected 1 warning for the unrecognized editor, got %d: %v", len(warnings), warnings)
 	}
 }
 

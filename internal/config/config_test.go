@@ -311,6 +311,61 @@ func TestBackupDirectoryHandling(t *testing.T) {
 	}
 }
 
+// isolateConfigDirs points every platform's config and data directory lookup
+// at temporary directories so Load and Save do not touch the real user config.
+func isolateConfigDirs(t *testing.T) {
+	t.Helper()
+
+	for _, key := range []string{
+		"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", // unix
+		"APPDATA", "LOCALAPPDATA", // windows
+	} {
+		t.Setenv(key, t.TempDir())
+	}
+}
+
+// TestLoadWithUnrecognizedEditor guards the regression where an $EDITOR outside
+// the hardcoded whitelist made config validation fail, which made Load return
+// an error, which made main exit 1 on every command including read-only ones.
+func TestLoadWithUnrecognizedEditor(t *testing.T) {
+	for _, editor := range []string{"nvim", "helix", "micro", "/usr/bin/vim"} {
+		t.Run(editor, func(t *testing.T) {
+			isolateConfigDirs(t)
+			t.Setenv("EDITOR", editor)
+
+			config, err := Load()
+			if err != nil {
+				t.Fatalf("Load() with EDITOR=%s should succeed, got: %v", editor, err)
+			}
+			if config == nil {
+				t.Fatal("Load() returned a nil config")
+			}
+			if config.General.Editor != editor {
+				t.Errorf("Editor = %q, want %q", config.General.Editor, editor)
+			}
+		})
+	}
+}
+
+// TestLoadPersistsUnrecognizedEditor checks the second run too: the first run
+// writes the config to disk, so the read path must accept it as well.
+func TestLoadPersistsUnrecognizedEditor(t *testing.T) {
+	isolateConfigDirs(t)
+	t.Setenv("EDITOR", "nvim")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("first Load() should succeed, got: %v", err)
+	}
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("second Load() should succeed, got: %v", err)
+	}
+	if config.General.Editor != "nvim" {
+		t.Errorf("Editor = %q, want %q", config.General.Editor, "nvim")
+	}
+}
+
 // BenchmarkDefaultConfig benchmarks the DefaultConfig function
 func BenchmarkDefaultConfig(b *testing.B) {
 	for i := 0; i < b.N; i++ {

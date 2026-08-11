@@ -154,6 +154,9 @@ func Load() (*Config, error) {
 		if err := Save(config); err != nil {
 			return config, fmt.Errorf("failed to create default config: %w", err)
 		}
+		validator := NewValidator()
+		_ = validator.Validate(config)
+		emitWarnings(validator)
 		return config, nil
 	}
 
@@ -176,8 +179,18 @@ func Load() (*Config, error) {
 	if err := validator.Validate(config); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
+	emitWarnings(validator)
 
 	return config, nil
+}
+
+// emitWarnings reports non-fatal configuration problems to stderr. They are
+// surfaced once at load time so the user learns about them without any
+// command being blocked.
+func emitWarnings(validator *ConfigValidator) {
+	for _, warning := range validator.Warnings() {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+	}
 }
 
 func Save(config *Config) error {
