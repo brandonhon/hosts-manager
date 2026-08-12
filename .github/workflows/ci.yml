@@ -110,15 +110,17 @@ jobs:
       # Keep GOSEC_VERSION in sync with the Makefile. Pinned for the same
       # reason golangci-lint is: an unpinned scanner can change behaviour
       # without a commit, and this one already went years without running.
-      # -no-fail makes gosec exit 0 when it finds issues, so findings do not
-      # gate the build while the 19 pre-existing ones await triage. This step
-      # deliberately does NOT use continue-on-error: that would also swallow a
-      # failure to install or run the scanner, which is exactly how a bad
-      # module path went unnoticed for the repo's entire history.
+      # Findings now fail the job. -no-fail was here while the pre-existing
+      # findings awaited triage; they are all annotated, so the scan is at zero
+      # and a new finding should stop the build rather than accumulate.
+      #
+      # No continue-on-error either: that would swallow a failure to install or
+      # run the scanner, which is exactly how a bad module path went unnoticed
+      # for the repo's entire history.
       - name: Run Gosec Security Scanner
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}
-          gosec -no-fail -fmt sarif -out results.sarif ./...
+          gosec -fmt sarif -out results.sarif ./...
         env:
           GOSEC_VERSION: v2.28.0
 

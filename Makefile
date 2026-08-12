@@ -229,7 +229,7 @@ security-gosec:
 	@echo "Running gosec security analysis..."
 	@mkdir -p $(BUILD_DIR)
 	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -fmt json -out $(BUILD_DIR)/gosec-report.json -stdout ./... || true; \
+		gosec -fmt json -out $(BUILD_DIR)/gosec-report.json -stdout ./...; \
 	else \
 		echo "gosec not found, install with: make install-security-tools"; \
 		exit 1; \
