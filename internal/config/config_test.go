@@ -2,8 +2,11 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/brandonhon/hosts-manager/pkg/platform"
 	"gopkg.in/yaml.v3"
 )
 
@@ -402,5 +405,63 @@ func BenchmarkConfigDeserialization(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// TestLoadFirstRunResolvesBackupDirectory guards the first-run gap: the backup
+// directory default was only applied on the read path, so the very first Load
+// returned an empty one and every command with AutoBackup enabled — the
+// default — failed at os.MkdirAll("").
+func TestLoadFirstRunResolvesBackupDirectory(t *testing.T) {
+	isolateConfigDirs(t)
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("first Load(): %v", err)
+	}
+	if config.Backup.Directory == "" {
+		t.Fatal("first run returned an empty backup directory")
+	}
+	if !strings.HasSuffix(filepath.Clean(config.Backup.Directory), filepath.Join("hosts-manager", "backups")) {
+		t.Errorf("backup directory = %q, want it under the data dir", config.Backup.Directory)
+	}
+
+	// The directory the first run reports must actually be usable, which is
+	// what the original bug broke.
+	if err := os.MkdirAll(config.Backup.Directory, 0700); err != nil {
+		t.Errorf("backup directory is not creatable: %v", err)
+	}
+
+	// The second run must agree with the first.
+	second, err := Load()
+	if err != nil {
+		t.Fatalf("second Load(): %v", err)
+	}
+	if second.Backup.Directory != config.Backup.Directory {
+		t.Errorf("second run resolved %q, first resolved %q", second.Backup.Directory, config.Backup.Directory)
+	}
+}
+
+// TestLoadFirstRunLeavesBackupDirectoryEmptyOnDisk pins the deliberate choice
+// that the written config keeps an empty backup directory: empty means "derive
+// it from the data dir at load time", which survives the home directory moving.
+func TestLoadFirstRunLeavesBackupDirectoryEmptyOnDisk(t *testing.T) {
+	isolateConfigDirs(t)
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(platform.New().GetConfigDir(), "config.yaml"))
+	if err != nil {
+		t.Fatalf("config file was not written: %v", err)
+	}
+	var onDisk Config
+	if err := yaml.Unmarshal(data, &onDisk); err != nil {
+		t.Fatal(err)
+	}
+	if onDisk.Backup.Directory != "" {
+		t.Errorf("config on disk pinned an absolute backup directory %q; it should stay empty",
+			onDisk.Backup.Directory)
 	}
 }
