@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -44,24 +46,76 @@ func (p *Platform) HasWritePermission() bool {
 	return true
 }
 
+// ElevateIfNeeded requires that the caller is actually running elevated before
+// a command modifies the hosts file.
+//
+// It used to accept mere write permission on the file, so on a system where
+// /etc/hosts had been made group-writable the tool would edit it without sudo.
+// Requiring elevation makes the privilege boundary the same everywhere rather
+// than a property of one file's mode, and it is what the tool is documented to
+// need. A dry run bypasses this entirely — see requireHostsWriteAccess.
 func (p *Platform) ElevateIfNeeded() error {
-	if p.HasWritePermission() {
-		return nil
+	if !p.IsElevated() {
+		return p.elevationRequiredError()
 	}
 
-	// Check if already elevated but still no write permission (other issue)
-	if p.IsElevated() {
-		return fmt.Errorf("elevated privileges detected but still cannot write to hosts file at %s - check file permissions or disk space", p.HostsDir)
+	// Elevated but still unable to write: a different problem, and worth
+	// saying so rather than repeating "run with sudo" at someone who did.
+	if !p.HasWritePermission() {
+		return fmt.Errorf("running elevated but still cannot write to hosts file at %s - check file permissions, immutable flags, or disk space", p.HostsDir)
 	}
 
+	return nil
+}
+
+func (p *Platform) elevationRequiredError() error {
 	switch runtime.GOOS {
 	case "windows":
 		return fmt.Errorf("administrator privileges required to modify hosts file. Please run this command in an elevated Command Prompt or PowerShell")
 	case "darwin", "linux":
 		return fmt.Errorf("root privileges required to modify hosts file. Please run: sudo %s", strings.Join(os.Args, " "))
 	default:
-		return fmt.Errorf("insufficient permissions to modify hosts file at %s", p.HostsDir)
+		return fmt.Errorf("elevated privileges required to modify hosts file at %s", p.HostsDir)
 	}
+}
+
+// invokingUser returns the home directory of the person who ran the command,
+// and whether they reached it through sudo.
+//
+// $HOME is not that person under sudo: most distributions reset it to root's,
+// so config, backups and audit logs written while elevated landed in /root and
+// were invisible to the user who owned them — and every command needs sudo, so
+// that was most of them. SUDO_USER names the account that invoked sudo.
+func invokingUser() (home string, viaSudo bool) {
+	if name := os.Getenv("SUDO_USER"); name != "" {
+		if u, err := user.Lookup(name); err == nil && u.HomeDir != "" {
+			return u.HomeDir, true
+		}
+	}
+	return os.Getenv("HOME"), false
+}
+
+// xdgDir returns the named XDG directory, or "" when it should not be trusted.
+//
+// Run normally it is the caller's and used as-is. Under sudo it may be unset,
+// may still hold root's value, or -- with sudo -E -- may be the invoking
+// user's. Accepting it only when it resolves inside that user's home tells the
+// three apart without having to guess.
+func xdgDir(name, home string, viaSudo bool) string {
+	value := os.Getenv(name)
+	if value == "" {
+		return ""
+	}
+	if !viaSudo {
+		return value
+	}
+	if home == "" {
+		return ""
+	}
+	if rel, err := filepath.Rel(home, value); err == nil && !strings.HasPrefix(rel, "..") {
+		return value
+	}
+	return ""
 }
 
 func (p *Platform) IsElevated() bool {
@@ -76,7 +130,11 @@ func (p *Platform) IsElevated() bool {
 	}
 }
 
+// GetConfigDir returns the configuration directory for the invoking user,
+// which under sudo is the account that ran sudo rather than root.
 func (p *Platform) GetConfigDir() string {
+	home, viaSudo := invokingUser()
+
 	switch runtime.GOOS {
 	case "windows":
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
@@ -84,16 +142,16 @@ func (p *Platform) GetConfigDir() string {
 		}
 		return `C:\ProgramData\hosts-manager`
 	case "darwin":
-		if home := os.Getenv("HOME"); home != "" {
-			return home + "/.config/hosts-manager"
+		if home != "" {
+			return filepath.Join(home, ".config", "hosts-manager")
 		}
 		return "/etc/hosts-manager"
 	case "linux":
-		if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-			return xdgConfig + "/hosts-manager"
+		if xdg := xdgDir("XDG_CONFIG_HOME", home, viaSudo); xdg != "" {
+			return filepath.Join(xdg, "hosts-manager")
 		}
-		if home := os.Getenv("HOME"); home != "" {
-			return home + "/.config/hosts-manager"
+		if home != "" {
+			return filepath.Join(home, ".config", "hosts-manager")
 		}
 		return "/etc/hosts-manager"
 	default:
@@ -101,7 +159,14 @@ func (p *Platform) GetConfigDir() string {
 	}
 }
 
+// GetDataDir returns the data directory — backups and audit logs — for the
+// invoking user, which under sudo is the account that ran sudo rather than
+// root. These belong with the person using the tool: it is a single-user
+// utility, and every writing command needs sudo, so anchoring them to root
+// would have put nearly all of them out of reach.
 func (p *Platform) GetDataDir() string {
+	home, viaSudo := invokingUser()
+
 	switch runtime.GOOS {
 	case "windows":
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
@@ -109,16 +174,16 @@ func (p *Platform) GetDataDir() string {
 		}
 		return p.GetConfigDir()
 	case "darwin":
-		if home := os.Getenv("HOME"); home != "" {
-			return home + "/Library/Application Support/hosts-manager"
+		if home != "" {
+			return filepath.Join(home, "Library", "Application Support", "hosts-manager")
 		}
 		return p.GetConfigDir()
 	case "linux":
-		if xdgData := os.Getenv("XDG_DATA_HOME"); xdgData != "" {
-			return xdgData + "/hosts-manager"
+		if xdg := xdgDir("XDG_DATA_HOME", home, viaSudo); xdg != "" {
+			return filepath.Join(xdg, "hosts-manager")
 		}
-		if home := os.Getenv("HOME"); home != "" {
-			return home + "/.local/share/hosts-manager"
+		if home != "" {
+			return filepath.Join(home, ".local", "share", "hosts-manager")
 		}
 		return p.GetConfigDir()
 	default:
