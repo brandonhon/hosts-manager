@@ -642,57 +642,55 @@ The codebase now exceeds industry security standards for system utilities handli
 The project follows 0.x.x development versioning until the stable 1.0.0 release:
 
 - **0.x.x releases**: Development versions with evolving features and API changes
-- **Semantic release**: Automated versioning based on conventional commits
-- **feat**: triggers minor version bump (0.1.0 -> 0.2.0)
-- **fix**: triggers patch version bump (0.1.0 -> 0.1.1)
-- **BREAKING CHANGE**: triggers major version bump (0.1.0 -> 1.0.0)
+- **Version numbers are chosen deliberately**, not derived from commit messages
 
-### Automated Release Workflow
-The project uses semantic-release for automated versioning:
+### Tag-Driven Release Workflow
 
-1. **Commit with conventional format**: `feat: add new feature`
-2. **Push to main branch**: Triggers semantic-release workflow
-3. **Automatic version bump**: Based on commit message type
-4. **Git tag creation**: Automatically creates version tag (e.g., v0.2.0)
-5. **GitHub release**: Creates release with changelog and binary assets
-6. **Binary distribution**: Builds for all platforms with optimized asset count
+Releases are cut by pushing a tag. `.github/workflows/release.yml` does the rest.
 
-### Release Assets (7 total)
-- **Windows**: `hosts-manager-v0.x.x-windows-amd64.zip`
-- **macOS Intel**: `hosts-manager-v0.x.x-darwin-amd64.tar.gz`
-- **macOS ARM**: `hosts-manager-v0.x.x-darwin-arm64.tar.gz`
-- **Linux Intel**: `hosts-manager-v0.x.x-linux-amd64.tar.gz`
-- **Linux ARM**: `hosts-manager-v0.x.x-linux-arm64.tar.gz`
-- **Source tar.gz**: `hosts-manager-v0.x.x-source.tar.gz`
-- **Source zip**: `hosts-manager-v0.x.x-source.zip`
-- **Checksums**: `checksums.txt` (SHA-256 verification)
+1. **Prepare the changelog**: move the `[Unreleased]` entries in `CHANGELOG.md` under a new
+   `## [X.Y.Z] - YYYY-MM-DD` heading, add its compare link to the reference list at the
+   bottom, and commit.
+2. **Tag and push**: `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push origin vX.Y.Z`
+3. The workflow validates the tag shape, **fails the release if the `## [X.Y.Z]` changelog
+   section is missing** (prereleases are exempt), cross-compiles, generates `SHA256SUMS`,
+   and publishes the release.
+4. Release notes are the changelog section for that version, with the auto-generated commit
+   list and compare link appended below it.
 
-### Manual Release (Emergency)
+To re-run a release without re-tagging, use **Run workflow** on the Actions tab and pass
+the existing tag. Prereleases (`vX.Y.Z-rc.1`) are flagged automatically.
+
+**There is no release bot.** `semantic-release` was removed: commit type no longer affects
+whether or how a version ships. Conventional commit prefixes are still the house style for
+readable history, but they carry no release semantics.
+
+### Release Assets (6 total)
+- **Linux Intel**: `hosts-manager-vX.Y.Z-linux-amd64.tar.gz`
+- **Linux ARM**: `hosts-manager-vX.Y.Z-linux-arm64.tar.gz`
+- **macOS Intel**: `hosts-manager-vX.Y.Z-darwin-amd64.tar.gz`
+- **macOS ARM**: `hosts-manager-vX.Y.Z-darwin-arm64.tar.gz`
+- **Windows**: `hosts-manager-vX.Y.Z-windows-amd64.zip`
+- **Checksums**: `SHA256SUMS`
+
+Source archives are not built explicitly — GitHub attaches a source zip and tarball to
+every release automatically.
+
+### Local Build (testing only, not a release path)
 ```bash
 make clean
-make validate
-make release
-make dist
-# Creates dist/ with all platform binaries and source archives
+make validate-fast
+make release   # cross-compile all platforms into dist/
+make dist      # add source archives + checksums.txt
 ```
 
 ### Version Detection
-The Makefile automatically detects version from Git tags:
+The Makefile detects version from Git tags:
 ```makefile
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 ```
-
-### Conventional Commit Format
-Use these prefixes for automatic version bumps:
-- `feat:` - New features (minor version bump)
-- `fix:` - Bug fixes (patch version bump)
-- `perf:` - Performance improvements (patch version bump)
-- `refactor:` - Code refactoring (patch version bump)
-- `docs:` - Documentation changes (patch version bump)
-- `chore:` - Maintenance tasks (no version bump)
-- `test:` - Test additions/changes (no version bump)
-
-Add `BREAKING CHANGE:` in commit body or `!` after type for major version bump.
+The release workflow instead passes the tag explicitly, so a release binary always reports
+the tag it was built from.
 
 ## Debugging Tips
 

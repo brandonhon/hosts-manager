@@ -332,30 +332,33 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ### Release Checklist
 
-1. **Pre-release**
+Pushing the tag is the whole release. `.github/workflows/release.yml` cross-compiles the
+binaries, generates `SHA256SUMS`, and publishes the GitHub Release.
+
+1. **Prepare the changelog.** Move the `[Unreleased]` entries under a new
+   `## [X.Y.Z] - YYYY-MM-DD` heading in `CHANGELOG.md`, add its compare link to the
+   reference list at the bottom, and commit. This section becomes the release notes, and
+   the workflow **fails a stable release if it is missing**.
+
+2. **Verify locally.**
    ```bash
-   # Update version in relevant files
-   # Update CHANGELOG.md
-   # Run full test suite
-   make ci
+   make validate-fast
    ```
 
-2. **Create Release**
+3. **Tag and push.**
    ```bash
    git tag -a v1.2.3 -m "Release v1.2.3"
    git push origin v1.2.3
    ```
 
-3. **Build Release Assets**
-   ```bash
-   make release  # Cross-compile for all platforms
-   make dist     # Create distribution packages
-   ```
+4. **Check the run.** The release notes are the changelog section with the auto-generated
+   commit list appended below. To re-run a release without re-tagging, use **Run workflow**
+   on the Actions tab and pass the existing tag.
 
-4. **GitHub Release**
-   - Create GitHub release from tag
-   - Upload distribution packages
-   - Write release notes
+Prereleases (`v1.2.3-rc.1`) are marked as such automatically and skip the changelog check.
+
+Building distribution archives locally (`make release`, `make dist`) is still available for
+testing, but is not part of cutting a release.
 
 ## Getting Help
 
