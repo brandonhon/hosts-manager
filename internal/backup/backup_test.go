@@ -957,3 +957,74 @@ func BenchmarkCalculateFileHash(b *testing.B) {
 		})
 	}
 }
+
+// TestRestoreFileIsAtomic guards the restore path: it used to open the hosts
+// file with O_TRUNC and copy into it in place, so a failure partway through
+// left a partial hosts file where a valid one had been. It now goes through
+// hosts.AtomicWrite, which writes a temp file and renames.
+func TestRestoreFileIsAtomic(t *testing.T) {
+	tempDir := t.TempDir()
+	manager := NewManager(createTestConfig(tempDir))
+
+	dst := filepath.Join(tempDir, "hosts")
+	original := "127.0.0.1 localhost\n"
+	if err := os.WriteFile(dst, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A backup whose gzip stream is truncated: decompression fails midway, so
+	// the write must not land at all.
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write([]byte(strings.Repeat("10.0.0.1 replaced.local\n", 200))); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-30-00.gz")
+	if err := os.WriteFile(corrupt, buf.Bytes()[:buf.Len()-40], 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.restoreFile(corrupt, dst, true); err == nil {
+		t.Error("restoring a truncated archive should fail")
+	}
+
+	// The original must be untouched: no partial write, no truncation.
+	after, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("hosts file is gone after a failed restore: %v", err)
+	}
+	if string(after) != original {
+		t.Errorf("hosts file was modified by a failed restore:\ngot  %q\nwant %q", after, original)
+	}
+
+	// A good backup still restores, and permissions survive the rename.
+	good := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-31-00")
+	replacement := "10.0.0.1 replaced.local\n"
+	if err := os.WriteFile(good, []byte(replacement), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.restoreFile(good, dst, false); err != nil {
+		t.Fatalf("restoreFile: %v", err)
+	}
+	after, err = os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != replacement {
+		t.Errorf("restored content = %q, want %q", after, replacement)
+	}
+	// Permission preservation is only meaningful where Unix mode bits exist.
+	// Windows has no such concept and Go reports 0666 for any writable file.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(dst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0644 {
+			t.Errorf("permissions after restore = %o, want 644", perm)
+		}
+	}
+}

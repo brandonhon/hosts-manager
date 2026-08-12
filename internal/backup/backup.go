@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brandonhon/hosts-manager/internal/config"
+	"github.com/brandonhon/hosts-manager/internal/hosts"
 	"github.com/brandonhon/hosts-manager/pkg/platform"
 )
 
@@ -75,17 +76,33 @@ func (m *Manager) copyFile(src, dst string, compress bool) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = dstFile.Close() }()
 
+	// Closing is where buffered data is flushed, so both closes are checked
+	// rather than deferred and discarded. A backup that failed to flush is
+	// short, and silently returning nil for it is how a truncated backup ends
+	// up looking like a good one.
 	if compress {
 		gzipWriter := gzip.NewWriter(dstFile)
-		defer func() { _ = gzipWriter.Close() }()
-		_, err = io.Copy(gzipWriter, srcFile)
+		if _, err := io.Copy(gzipWriter, srcFile); err != nil {
+			_ = gzipWriter.Close()
+			_ = dstFile.Close()
+			return err
+		}
+		if err := gzipWriter.Close(); err != nil {
+			_ = dstFile.Close()
+			return fmt.Errorf("failed to finish compressing backup: %w", err)
+		}
 	} else {
-		_, err = io.Copy(dstFile, srcFile)
+		if _, err := io.Copy(dstFile, srcFile); err != nil {
+			_ = dstFile.Close()
+			return err
+		}
 	}
 
-	return err
+	if err := dstFile.Close(); err != nil {
+		return fmt.Errorf("failed to close backup: %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) RestoreBackup(backupPath string) error {
@@ -110,24 +127,23 @@ func (m *Manager) RestoreBackup(backupPath string) error {
 	return nil
 }
 
+// restoreFile writes a backup back over the hosts file.
+//
+// This goes through hosts.AtomicWrite — the same lock, temp file and rename
+// that every other write to the hosts file uses. It previously opened the
+// destination with O_TRUNC and copied into it in place, so an interrupted or
+// failed restore left a partially written hosts file where a valid one had
+// been. Restore is the one operation you reach for when the hosts file is
+// already wrong, which is the worst possible moment to be able to corrupt it.
+//
+// File permissions are preserved by AtomicWrite, which chmods the temp file to
+// match the target before renaming.
 func (m *Manager) restoreFile(src, dst string, decompress bool) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = srcFile.Close() }()
-
-	// Get the original destination file permissions to preserve them
-	var fileMode os.FileMode = 0644 // Default fallback
-	if dstInfo, err := os.Stat(dst); err == nil {
-		fileMode = dstInfo.Mode()
-	}
-
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fileMode)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dstFile.Close() }()
 
 	var reader io.Reader = srcFile
 	if decompress {
@@ -139,8 +155,10 @@ func (m *Manager) restoreFile(src, dst string, decompress bool) error {
 		reader = gzipReader
 	}
 
-	_, err = io.Copy(dstFile, reader)
-	return err
+	return hosts.AtomicWrite(dst, func(w io.Writer) error {
+		_, err := io.Copy(w, reader)
+		return err
+	})
 }
 
 func (m *Manager) ListBackups() ([]BackupInfo, error) {
