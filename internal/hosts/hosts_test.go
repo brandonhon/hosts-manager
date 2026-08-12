@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -1407,14 +1406,20 @@ func TestHostsFileEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("concurrent access to hosts file", func(t *testing.T) {
+	// This was "concurrent access to hosts file": ten goroutines calling
+	// AddEntry on one HostsFile. HostsFile carries no lock and is not
+	// goroutine-safe, so that raced. The assertion allowed 9 *or* 10 entries
+	// precisely because entries were being lost, and it still failed roughly
+	// one run in 250 — it had already been skipped on Windows CI for the same
+	// reason, which hid half the problem.
+	//
+	// Nothing in the tool calls AddEntry concurrently: the CLI and TUI are
+	// single-threaded, and concurrency between processes is handled by the file
+	// lock in atomic.go rather than here. The bulk-add coverage is kept, the
+	// false premise is not, and the count is now exact.
+	t.Run("many entries added to one category", func(t *testing.T) {
 		if testing.Short() {
-			t.Skip("Skipping concurrency test in short mode")
-		}
-
-		// Skip on Windows in CI environments where this test is flaky
-		if runtime.GOOS == "windows" && os.Getenv("CI") != "" {
-			t.Skip("Skipping flaky concurrency test on Windows CI")
+			t.Skip("Skipping bulk add test in short mode")
 		}
 
 		hostsFile := &HostsFile{
@@ -1423,42 +1428,21 @@ func TestHostsFileEdgeCases(t *testing.T) {
 			},
 		}
 
-		var wg sync.WaitGroup
-		var mu sync.Mutex
-		errors := []error{}
-
-		// Concurrent AddEntry operations
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				entry := Entry{
-					IP:        fmt.Sprintf("192.168.1.%d", id+1),
-					Hostnames: []string{fmt.Sprintf("host%d.local", id)},
-					Category:  CategoryDefault,
-					Enabled:   true,
-				}
-				if err := hostsFile.AddEntry(entry); err != nil {
-					mu.Lock()
-					errors = append(errors, err)
-					mu.Unlock()
-				}
-			}(i)
-		}
-
-		wg.Wait()
-
-		// Check for any errors
-		if len(errors) > 0 {
-			for _, err := range errors {
-				t.Errorf("Concurrent access error: %v", err)
+		const want = 10
+		for i := 0; i < want; i++ {
+			entry := Entry{
+				IP:        fmt.Sprintf("192.168.1.%d", i+1),
+				Hostnames: []string{fmt.Sprintf("host%d.local", i)},
+				Category:  CategoryDefault,
+				Enabled:   true,
+			}
+			if err := hostsFile.AddEntry(entry); err != nil {
+				t.Fatalf("AddEntry(%s) error = %v", entry.IP, err)
 			}
 		}
 
-		// Verify all entries were added (allowing for some potential validation failures in concurrent access)
-		entryCount := len(hostsFile.Categories[0].Entries)
-		if entryCount < 9 || entryCount > 10 {
-			t.Errorf("expected 9-10 entries due to concurrent access, got %d", entryCount)
+		if got := len(hostsFile.Categories[0].Entries); got != want {
+			t.Errorf("entries = %d, want %d", got, want)
 		}
 	})
 }
