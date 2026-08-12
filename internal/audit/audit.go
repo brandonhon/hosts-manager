@@ -382,33 +382,47 @@ func (l *Logger) rotateIfNeeded() error {
 	return l.rotateLog()
 }
 
-// rotateLog performs the actual log rotation
-func (l *Logger) rotateLog() error {
-	logDir := filepath.Dir(l.logPath)
-	logBasename := filepath.Base(l.logPath)
+// rotatedLogName returns the name of rotation slot i. Compression is
+// best-effort, so a slot may hold either form and both must be handled.
+func (l *Logger) rotatedLogName(i int, compressed bool) string {
+	name := fmt.Sprintf("%s.%d", l.logPath, i)
+	if compressed {
+		name += ".gz"
+	}
+	return name
+}
 
-	// Remove the oldest log if we have too many
-	oldestLog := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, l.maxLogs))
-	if _, err := os.Stat(oldestLog); err == nil {
-		if err := os.Remove(oldestLog); err != nil {
+// rotateLog performs the actual log rotation.
+//
+// Slots are shifted in their existing form. Rotated logs are compressed, so
+// slot i is normally audit.log.i.gz; matching only the uncompressed name would
+// mean no slot is ever found, every shift is a no-op, and slot 1 is overwritten
+// on each rotation — leaving exactly one rotated log however high maxLogs is.
+func (l *Logger) rotateLog() error {
+	// Drop the oldest slot, in whichever form it exists.
+	for _, compressed := range []bool{true, false} {
+		oldest := l.rotatedLogName(l.maxLogs, compressed)
+		if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove oldest log: %w", err)
 		}
 	}
 
-	// Shift existing rotated logs
+	// Shift the remaining slots up one, preserving compressed vs plain.
 	for i := l.maxLogs - 1; i >= 1; i-- {
-		oldName := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, i))
-		newName := filepath.Join(logDir, fmt.Sprintf("%s.%d", logBasename, i+1))
-
-		if _, err := os.Stat(oldName); err == nil {
-			if err := os.Rename(oldName, newName); err != nil {
-				return fmt.Errorf("failed to rotate log %s to %s: %w", oldName, newName, err)
+		for _, compressed := range []bool{true, false} {
+			from := l.rotatedLogName(i, compressed)
+			if _, err := os.Stat(from); err != nil {
+				continue
+			}
+			to := l.rotatedLogName(i+1, compressed)
+			if err := os.Rename(from, to); err != nil {
+				return fmt.Errorf("failed to rotate log %s to %s: %w", from, to, err)
 			}
 		}
 	}
 
-	// Move current log to .1
-	rotatedName := filepath.Join(logDir, fmt.Sprintf("%s.1", logBasename))
+	// Move the current log into slot 1.
+	rotatedName := l.rotatedLogName(1, false)
 	if err := os.Rename(l.logPath, rotatedName); err != nil {
 		return fmt.Errorf("failed to rotate current log: %w", err)
 	}
