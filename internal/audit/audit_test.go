@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEventTypeConstants(t *testing.T) {
@@ -842,5 +843,90 @@ func BenchmarkSanitizeMapForAuditLog(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		sanitizeMapForAuditLog(testMap)
+	}
+}
+
+// TestGetRecentEventsReturnsNewest guards two defects: the function decoded
+// from the start of the file and stopped at limit, so it returned the OLDEST
+// events; and it skipped decode failures with `continue`, which spun forever
+// because json.Decoder cannot resynchronise after a syntax error.
+func TestGetRecentEventsReturnsNewest(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "audit.log")
+	logger := &Logger{
+		logPath:    logPath,
+		enabled:    true,
+		minLevel:   SeverityInfo,
+		maxLogSize: 1 << 20,
+		maxLogs:    5,
+	}
+
+	const total = 12
+	for i := 1; i <= total; i++ {
+		logger.LogFileOperation(fmt.Sprintf("op-%02d", i), "resource", true, "")
+	}
+
+	t.Run("returns the newest, oldest first", func(t *testing.T) {
+		events, err := logger.GetRecentEvents(5)
+		if err != nil {
+			t.Fatalf("GetRecentEvents: %v", err)
+		}
+		if len(events) != 5 {
+			t.Fatalf("got %d events, want 5", len(events))
+		}
+		for i, ev := range events {
+			want := fmt.Sprintf("op-%02d", total-5+1+i)
+			if ev.Operation != want {
+				t.Errorf("events[%d].Operation = %q, want %q", i, ev.Operation, want)
+			}
+		}
+	})
+
+	t.Run("limit larger than the log returns everything", func(t *testing.T) {
+		events, err := logger.GetRecentEvents(100)
+		if err != nil {
+			t.Fatalf("GetRecentEvents: %v", err)
+		}
+		if len(events) != total {
+			t.Fatalf("got %d events, want %d", len(events), total)
+		}
+		if events[0].Operation != "op-01" || events[total-1].Operation != fmt.Sprintf("op-%02d", total) {
+			t.Errorf("ordering wrong: first=%q last=%q", events[0].Operation, events[total-1].Operation)
+		}
+	})
+
+	t.Run("non-positive limit", func(t *testing.T) {
+		events, err := logger.GetRecentEvents(0)
+		if err != nil || len(events) != 0 {
+			t.Errorf("GetRecentEvents(0) = %v, %v; want empty, nil", events, err)
+		}
+	})
+}
+
+// TestGetRecentEventsTerminatesOnMalformedLog is the regression test for the
+// hang: a record json.Decoder cannot parse used to loop forever.
+func TestGetRecentEventsTerminatesOnMalformedLog(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "audit.log")
+	content := `{"operation":"first"}` + "\n" + `{{{ not json` + "\n"
+	if err := os.WriteFile(logPath, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	logger := &Logger{logPath: logPath, enabled: true, minLevel: SeverityInfo, maxLogSize: 1 << 20, maxLogs: 5}
+
+	done := make(chan []AuditEvent, 1)
+	go func() {
+		events, _ := logger.GetRecentEvents(10)
+		done <- events
+	}()
+
+	select {
+	case events := <-done:
+		// Everything decodable before the corruption should survive.
+		if len(events) != 1 || events[0].Operation != "first" {
+			t.Errorf("recovered %d events (%+v), want the single valid record", len(events), events)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("GetRecentEvents did not terminate on a malformed log")
 	}
 }
