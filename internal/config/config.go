@@ -149,25 +149,33 @@ func Load() (*Config, error) {
 	configDir := p.GetConfigDir()
 	configPath := filepath.Join(configDir, "config.yaml")
 
+	// Both paths converge below. They used to be separate, and only the
+	// read path filled in the backup directory — so the very first run
+	// returned a config with an empty one and every command with AutoBackup
+	// enabled (the default) failed at os.MkdirAll("").
+	config := DefaultConfig()
+	firstRun := false
+
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		config := DefaultConfig()
+		firstRun = true
+	} else {
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+		if err := yaml.Unmarshal(data, config); err != nil {
+			return nil, fmt.Errorf("failed to parse config file: %w", err)
+		}
+	}
+
+	// Written before the backup directory is resolved, so the file on disk
+	// keeps an empty value. An empty directory means "work it out from the
+	// data dir at load time", which survives the home directory moving; a
+	// resolved absolute path baked into the file would not.
+	if firstRun {
 		if err := Save(config); err != nil {
 			return config, fmt.Errorf("failed to create default config: %w", err)
 		}
-		validator := NewValidator()
-		_ = validator.Validate(config)
-		emitWarnings(validator)
-		return config, nil
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	config := DefaultConfig()
-	if err := yaml.Unmarshal(data, config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
 	if config.Backup.Directory == "" {
