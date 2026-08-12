@@ -333,8 +333,22 @@ func (l *Logger) SetEnabled(enabled bool) {
 	l.enabled = enabled
 }
 
-// GetRecentEvents retrieves recent audit events (for security monitoring)
+// GetRecentEvents returns up to limit of the most recently written events,
+// oldest first within the returned slice.
+//
+// Only the active log is read; rotated archives are not searched, so shortly
+// after a rotation this returns fewer events than the audit trail holds.
+//
+// This previously decoded from the start of the file and stopped once it had
+// limit records, which returned the *oldest* events under a name promising the
+// newest. It also skipped decode failures with `continue`, which made a single
+// malformed record loop forever — json.Decoder cannot resynchronise after a
+// syntax error, so More() kept returning true at the same position.
 func (l *Logger) GetRecentEvents(limit int) ([]AuditEvent, error) {
+	if limit <= 0 {
+		return []AuditEvent{}, nil
+	}
+
 	file, err := os.Open(l.logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -348,17 +362,33 @@ func (l *Logger) GetRecentEvents(limit int) ([]AuditEvent, error) {
 		}
 	}()
 
-	var events []AuditEvent
-	decoder := json.NewDecoder(file)
+	// Keep a sliding window of the last `limit` records, so the cost is bounded
+	// by the limit rather than by the size of the log.
+	ring := make([]AuditEvent, limit)
+	total := 0
 
-	for decoder.More() && len(events) < limit {
+	decoder := json.NewDecoder(file)
+	for decoder.More() {
 		var event AuditEvent
 		if err := decoder.Decode(&event); err != nil {
-			continue // Skip malformed entries
+			// json.Decoder cannot resynchronise after a syntax error: it keeps
+			// reporting More() at the same position. Skipping the record here
+			// spins forever, so stop reading and return what was recovered.
+			break
 		}
-		events = append(events, event)
+		ring[total%limit] = event
+		total++
 	}
 
+	if total < limit {
+		return ring[:total], nil
+	}
+
+	// Unwrap the ring: the oldest retained record sits at total%limit.
+	events := make([]AuditEvent, 0, limit)
+	for i := 0; i < limit; i++ {
+		events = append(events, ring[(total+i)%limit])
+	}
 	return events, nil
 }
 
