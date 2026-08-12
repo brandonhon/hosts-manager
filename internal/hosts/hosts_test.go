@@ -1677,3 +1677,122 @@ func TestHostsFileAddCategoryAndWrite(t *testing.T) {
 		t.Errorf("Expected description 'Testing category for persistence', got '%s'", testingCategory.Description)
 	}
 }
+
+// TestParseWriteRoundTripPreservesComments covers #11 and #10 together, since
+// both are about a rewrite not matching what was read.
+//
+// Standalone comments below the first host line used to be dropped outright,
+// and Footer was declared, written and exported but never populated by the
+// parser — so annotations in a hand-edited hosts file disappeared on the next
+// save. Category order came from ranging a map, so it was randomized on every
+// write even when nothing changed.
+func TestParseWriteRoundTripPreservesComments(t *testing.T) {
+	const original = `# Managed by hand
+# Second header line
+
+# @category development Dev boxes
+127.0.0.1 dev.local # inline note
+
+# a standalone note about the API box
+# spanning two lines
+192.168.1.100 api.dev
+
+# @category production
+10.0.0.50 api.prod
+
+# @category blocked
+0.0.0.0 ads.example.com
+
+# trailing note at the end of the file
+`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	hf, err := NewParser(path).Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	t.Run("standalone comments attach to the following entry", func(t *testing.T) {
+		var apiDev *Entry
+		for i := range hf.Categories {
+			for j := range hf.Categories[i].Entries {
+				if hf.Categories[i].Entries[j].IP == "192.168.1.100" {
+					apiDev = &hf.Categories[i].Entries[j]
+				}
+			}
+		}
+		if apiDev == nil {
+			t.Fatal("api.dev entry not found")
+		}
+		if len(apiDev.Notes) != 2 {
+			t.Fatalf("api.dev has %d notes, want 2: %q", len(apiDev.Notes), apiDev.Notes)
+		}
+	})
+
+	t.Run("trailing comments become the footer", func(t *testing.T) {
+		if len(hf.Footer) != 1 || !strings.Contains(hf.Footer[0], "trailing note") {
+			t.Errorf("Footer = %q, want the trailing note", hf.Footer)
+		}
+	})
+
+	// Writing and re-reading must not lose anything or reorder the file.
+	out := filepath.Join(dir, "hosts.written")
+	if err := hf.Write(out); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	written, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("comments survive the rewrite", func(t *testing.T) {
+		for _, want := range []string{
+			"# a standalone note about the API box",
+			"# spanning two lines",
+			"# trailing note at the end of the file",
+			"# inline note",
+		} {
+			if !strings.Contains(string(written), want) {
+				t.Errorf("rewritten file lost %q\n---\n%s", want, written)
+			}
+		}
+	})
+
+	t.Run("category order is stable across repeated writes", func(t *testing.T) {
+		want := []string{"development", "production", "blocked"}
+		for attempt := 0; attempt < 20; attempt++ {
+			reread, err := NewParser(out).Parse()
+			if err != nil {
+				t.Fatalf("re-parse: %v", err)
+			}
+			var got []string
+			for _, c := range reread.Categories {
+				got = append(got, c.Name)
+			}
+			if len(got) != len(want) {
+				t.Fatalf("categories = %v, want %v", got, want)
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("attempt %d: category order = %v, want %v", attempt, got, want)
+				}
+			}
+			round := filepath.Join(dir, "hosts.round")
+			if err := reread.Write(round); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(round)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(b) != string(written) {
+				t.Fatalf("attempt %d: rewrite is not byte-stable\n--- got ---\n%s\n--- want ---\n%s", attempt, b, written)
+			}
+		}
+	})
+}
