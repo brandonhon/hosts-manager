@@ -29,6 +29,11 @@ DIST_DIR=dist
 # Platforms for cross-compilation
 PLATFORMS=windows/amd64 darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 
+# Tool versions
+# golangci-lint v2 is required: .golangci.yml uses the v2 schema, which v1
+# cannot parse. Keep this in sync with .github/workflows/ci.yml.
+GOLANGCI_VERSION=v2.11.4
+
 .PHONY: all build build-dev clean test coverage bench lint lint-fast lint-fix fmt vet deps deps-update help install uninstall release dist run run-tui run-list run-help docker-build docker-run security security-gosec security-nancy security-govulncheck security-semgrep security-license security-sbom security-container security-audit docs install-linters install-security-tools install-dev-tools init check-updates validate validate-fast validate-full pre-commit quality-gate pre-release dev ci ci-full
 
 all: clean fmt vet test build
@@ -71,20 +76,23 @@ bench:
 	GO111MODULE=on $(GOTEST) -bench=. -benchmem ./...
 
 # Comprehensive linting
+# Reads .golangci.yml so this matches the CI lint job exactly. Do not add
+# --no-config here: it discards the config, including max-same-issues, which
+# silently caps reporting at 3 issues per rule.
 lint:
 	@echo "Running comprehensive linters..."
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --no-config --enable=govet,errcheck,staticcheck,unused,ineffassign,unconvert,misspell --timeout=5m ./...; \
+		golangci-lint run --timeout=5m ./...; \
 	else \
 		echo "golangci-lint not found, install with: make install-linters"; \
 		exit 1; \
 	fi
 
-# Fast linting (subset of checks)
+# Fast linting (same config, filtered to the linters that run quickly)
 lint-fast:
 	@echo "Running fast linters..."
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --no-config --enable=govet,errcheck,staticcheck --timeout=2m ./...; \
+		golangci-lint run --fast-only --timeout=2m ./...; \
 	else \
 		echo "golangci-lint not found, install with: make install-linters"; \
 		exit 1; \
@@ -94,7 +102,7 @@ lint-fast:
 lint-fix:
 	@echo "Running linters with auto-fix..."
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --no-config --enable=unconvert --fix ./...; \
+		golangci-lint run --fix --timeout=5m ./...; \
 	else \
 		echo "golangci-lint not found, install with: make install-linters"; \
 		exit 1; \
@@ -300,10 +308,10 @@ docs:
 install-linters:
 	@echo "Installing linting tools..."
 	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		echo "Installing golangci-lint..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
+		echo "Installing golangci-lint $(GOLANGCI_VERSION)..."; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_VERSION); \
 	else \
-		echo "golangci-lint already installed"; \
+		echo "golangci-lint already installed: $$(golangci-lint version 2>/dev/null | head -1)"; \
 	fi
 	@if ! command -v gofumpt >/dev/null 2>&1; then \
 		echo "Installing gofumpt..."; \

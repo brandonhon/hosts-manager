@@ -656,7 +656,7 @@ func exportToHosts(hostsFile *hosts.HostsFile) ([]byte, error) {
 			continue
 		}
 
-		builder.WriteString(fmt.Sprintf("# =============== %s ===============\n", strings.ToUpper(category.Name)))
+		fmt.Fprintf(&builder, "# =============== %s ===============\n", strings.ToUpper(category.Name))
 
 		for _, entry := range category.Entries {
 			if !entry.Enabled {

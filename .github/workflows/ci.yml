@@ -89,10 +89,13 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      # Action v7+ is required to run golangci-lint v2, which .golangci.yml
+      # targets. The linter version is pinned so CI and `make install-linters`
+      # agree; keep it in sync with GOLANGCI_VERSION in the Makefile.
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.11.4
           args: --timeout=5m
 
   security:
