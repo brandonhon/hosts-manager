@@ -62,6 +62,14 @@ func validateIPSecurity(ip net.IP) error {
 		return nil
 	}
 
+	// 0.0.0.0 and :: are the conventional way to blackhole a hostname in a
+	// hosts file, and the shipped "blocked" category exists for precisely that
+	// use. The address cannot route anywhere, which is the whole point of
+	// pointing an unwanted host at it.
+	if ip.IsUnspecified() {
+		return nil
+	}
+
 	// Allow private networks - these are also legitimate for local development
 	if isPrivateIP(ip) {
 		return nil
@@ -75,10 +83,6 @@ func validateIPSecurity(ip net.IP) error {
 	// Reject special-use addresses that could be problematic
 	if ip.IsMulticast() {
 		return fmt.Errorf("multicast IP addresses not allowed: %s", ip.String())
-	}
-
-	if ip.IsUnspecified() {
-		return fmt.Errorf("unspecified IP addresses not allowed: %s", ip.String())
 	}
 
 	// Check for IPv6 special addresses
