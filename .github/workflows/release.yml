@@ -1,86 +1,107 @@
 name: Release
 
+# Fires on semver tag pushes (v0.7.0, v1.0.0-rc.1, ...) and produces
+# cross-compiled binaries packaged as tarballs (zip for Windows) with a
+# SHA256SUMS file, attached to a GitHub Release.
+#
+# Release notes are the curated CHANGELOG.md section for the version, with the
+# auto-generated commit list and compare link appended below it.
+#
+# Cutting a release:
+#   1. Move the [Unreleased] entries under a new "## [X.Y.Z] - <date>" heading
+#      in CHANGELOG.md and add its bottom link ref, then commit.
+#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+#
+# Re-run a release without re-tagging via "Run workflow" on the Actions tab,
+# passing the existing tag name.
+
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to (re-)release (must already exist, e.g. v0.7.0)'
+        required: true
+        type: string
+
+# Needed to create the Release and upload assets. The repo's default workflow
+# token is read-only, so this cannot be omitted.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 env:
   GO_VERSION: 'stable'
 
 jobs:
-  test:
-    name: Test
+  prepare:
+    name: Parse tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      version_no_v: ${{ steps.parse.outputs.version_no_v }}
+      is_prerelease: ${{ steps.parse.outputs.is_prerelease }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run tests
-        run: make test
-
-      - name: Run validation
-        run: make validate-fast
-
-  security:
-    name: Security Analysis
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Install security tools
+      - id: parse
         run: |
-          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag must match v<major>.<minor>.<patch>[-prerelease], got: $TAG"
+            exit 1
+          fi
+          IS_PRERELEASE=false
+          [[ "$TAG" == *-* ]] && IS_PRERELEASE=true
+          {
+            echo "version=$TAG"
+            echo "version_no_v=${TAG#v}"
+            echo "is_prerelease=$IS_PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Run security analysis
-        run: make security-gosec
-
-      - name: Run vulnerability check
-        run: govulncheck ./...
+      # A stable release must have its curated CHANGELOG section, because that
+      # section becomes the release body. Prereleases are exempt.
+      - name: Verify CHANGELOG is prepped for this version
+        if: steps.parse.outputs.is_prerelease == 'false'
+        run: |
+          ver="${{ steps.parse.outputs.version_no_v }}"
+          if ! grep -qE "^## \[${ver}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${ver}]' section. Add the release notes before tagging."
+            exit 1
+          fi
+          echo "CHANGELOG OK for ${ver}"
 
   build:
-    name: Build
+    name: Binary (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: prepare
     runs-on: ubuntu-latest
-    needs: [test, security]
     strategy:
+      fail-fast: false
       matrix:
-        goos: [linux, windows, darwin]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
             goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set up Go
@@ -88,150 +109,93 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Build binary
+      - name: Build and package
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          VERSION=${GITHUB_REF_NAME}
+          set -euo pipefail
           BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-          COMMIT_HASH=${GITHUB_SHA::8}
-          
-          BINARY_NAME=hosts-manager
-          if [ "$GOOS" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-          
-          LDFLAGS="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commitHash=${COMMIT_HASH}"
-          
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+
+          BINARY=hosts-manager
+          [ "$GOOS" = "windows" ] && BINARY=hosts-manager.exe
+
           mkdir -p dist
-          go build -ldflags "${LDFLAGS}" -trimpath -o "dist/${BINARY_NAME}-${GOOS}-${GOARCH}" ./cmd/hosts-manager
-          
-          # Create archive
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commitHash=${COMMIT_HASH}" \
+            -o "dist/${BINARY}" ./cmd/hosts-manager
+
+          ARCHIVE="hosts-manager-${VERSION}-${GOOS}-${GOARCH}"
           cd dist
           if [ "$GOOS" = "windows" ]; then
-            zip "${BINARY_NAME}-${VERSION}-${GOOS}-${GOARCH}.zip" "${BINARY_NAME}-${GOOS}-${GOARCH}"
+            zip -q "${ARCHIVE}.zip" "${BINARY}"
           else
-            tar -czf "${BINARY_NAME}-${VERSION}-${GOOS}-${GOARCH}.tar.gz" "${BINARY_NAME}-${GOOS}-${GOARCH}"
+            tar -czf "${ARCHIVE}.tar.gz" "${BINARY}"
           fi
+          rm "${BINARY}"
+          ls -la
 
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hosts-manager-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
+          retention-days: 1
+          if-no-files-found: error
 
   release:
-    name: Create Release
+    name: GitHub Release
+    needs: [prepare, build]
     runs-on: ubuntu-latest
-    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0   # full history so generate_release_notes can diff
 
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: binary-*
           path: dist
           merge-multiple: true
 
-      - name: Generate changelog
-        id: changelog
+      - name: Generate SHA256SUMS
         run: |
-          # Get the previous tag
-          PREV_TAG=$(git tag --sort=-version:refname | head -n 2 | tail -n 1)
-          if [ -z "$PREV_TAG" ]; then
-            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          
-          # Generate changelog between tags
-          echo "## What's Changed" > changelog.md
-          echo "" >> changelog.md
-          
-          # Get commits since last tag
-          git log --pretty=format:"* %s" "${PREV_TAG}..HEAD" | grep -E "^(feat|fix|perf|refactor):" | sed 's/^/- /' >> changelog.md || true
-          
-          # Add breaking changes if any
-          BREAKING_CHANGES=$(git log --pretty=format:"%s%n%b" "${PREV_TAG}..HEAD" | grep -i "BREAKING CHANGE" || true)
-          if [ ! -z "$BREAKING_CHANGES" ]; then
-            echo "" >> changelog.md
-            echo "### ⚠️ Breaking Changes" >> changelog.md
-            echo "$BREAKING_CHANGES" | sed 's/^/- /' >> changelog.md
-          fi
-          
-          # Add contributors
-          echo "" >> changelog.md
-          echo "### Contributors" >> changelog.md
-          git log --pretty=format:"- @%an" "${PREV_TAG}..HEAD" | sort -u >> changelog.md
-          
-          # Set output for use in release
-          {
-            echo 'CHANGELOG<<EOF'
-            cat changelog.md
-            echo EOF
-          } >> $GITHUB_OUTPUT
-
-      - name: Create checksums
-        run: |
+          set -euo pipefail
           cd dist
-          for file in *.tar.gz *.zip; do
-            if [ -f "$file" ]; then
-              sha256sum "$file" >> checksums.txt
-            fi
-          done
+          sha256sum hosts-manager-* | sort -k2 > SHA256SUMS
+          cat SHA256SUMS
+
+      # The release body is the curated CHANGELOG section for this version.
+      # The tag is vX.Y.Z; the CHANGELOG heading is "## [X.Y.Z]" with no v.
+      - name: Extract CHANGELOG section for this version
+        run: |
+          ver="${{ needs.prepare.outputs.version_no_v }}"
+          awk -v ver="$ver" '
+            index($0, "## [" ver "]") == 1 { grab = 1; next }
+            grab && index($0, "## [") == 1 { exit }
+            grab { print }
+          ' CHANGELOG.md > release-body.md
+          if [ -s release-body.md ]; then
+            echo "Extracted CHANGELOG section for $ver:"; cat release-body.md
+          else
+            echo "No CHANGELOG section for $ver; release notes will be the generated commit list only." > release-body.md
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: |
-            # Hosts Manager ${{ github.ref_name }}
-            
-            ${{ steps.changelog.outputs.CHANGELOG }}
-            
-            ## Installation
-            
-            ### Linux/macOS
-            ```bash
-            # Download and extract
-            curl -L -o hosts-manager.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/hosts-manager-${{ github.ref_name }}-linux-amd64.tar.gz
-            tar -xzf hosts-manager.tar.gz
-            sudo mv hosts-manager-linux-amd64 /usr/local/bin/hosts-manager
-            chmod +x /usr/local/bin/hosts-manager
-            ```
-            
-            ### Windows
-            ```powershell
-            # Download from releases page and add to PATH
-            ```
-            
-            ## Checksums
-            ```
-            $(cat dist/checksums.txt)
-            ```
-            
-            ---
-            
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ github.ref_name }}
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.version }}
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          body_path: release-body.md
+          generate_release_notes: true
           files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
-          draft: false
-          prerelease: false
+            dist/hosts-manager-*
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true

@@ -624,9 +624,9 @@ See the [latest release](https://github.com/brandonhon/hosts-manager/releases/la
 - **1.0.0 release**: Planned stable release with locked API and guaranteed backward compatibility
 
 **Release Process:**
-- New releases are triggered automatically only for changes to Go source code
-- Documentation-only changes do not trigger new releases
-- Uses semantic versioning based on conventional commit messages
+- Releases are cut by pushing a `vX.Y.Z` tag; version numbers are chosen deliberately
+- Each release's notes come from that version's section in [CHANGELOG.md](CHANGELOG.md)
+- Every release ships binaries for Linux, macOS and Windows plus a `SHA256SUMS` file
 
 The project is suitable for testing, development environments, and feedback. Use with caution in production until the 1.0.0 stable release.
 
