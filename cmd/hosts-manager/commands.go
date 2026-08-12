@@ -141,8 +141,9 @@ func configCmd() *cobra.Command {
 				}
 
 				// Validate editor command for security
-				if !isValidEditor(editor) {
-					return fmt.Errorf("editor '%s' is not allowed for security reasons. Allowed editors: nano, vim, vi, emacs, code, notepad", editor)
+				if !config.IsValidEditor(editor) {
+					return fmt.Errorf("editor %q is not allowed for security reasons. Allowed editors: %s",
+						editor, strings.Join(config.AllowedEditors(), ", "))
 				}
 
 				return runCommand(editor, configPath)
@@ -854,46 +855,6 @@ func validateFilePath(filePath string, allowedDir string) (string, error) {
 	}
 
 	return absPath, nil
-}
-
-// isValidEditor validates that the editor command is safe to execute
-func isValidEditor(editor string) bool {
-	// Whitelist of allowed editors - only the base command name, no arguments
-	allowedEditors := map[string]bool{
-		"nano":         true,
-		"vim":          true,
-		"vi":           true,
-		"emacs":        true,
-		"code":         true,
-		"notepad":      true,
-		"notepad++":    true,
-		"sublime_text": true,
-		"atom":         true,
-		"gedit":        true,
-		"kate":         true,
-	}
-
-	// Extract just the command name (no paths, no arguments)
-	editorCmd := strings.TrimSpace(editor)
-
-	// Reject if contains suspicious characters
-	if strings.Contains(editorCmd, ";") ||
-		strings.Contains(editorCmd, "&") ||
-		strings.Contains(editorCmd, "|") ||
-		strings.Contains(editorCmd, "`") ||
-		strings.Contains(editorCmd, "$") ||
-		strings.Contains(editorCmd, "&&") ||
-		strings.Contains(editorCmd, "||") {
-		return false
-	}
-
-	// Extract just the base command (handle full paths)
-	baseName := filepath.Base(editorCmd)
-
-	// Remove .exe extension on Windows
-	baseName = strings.TrimSuffix(baseName, ".exe")
-
-	return allowedEditors[baseName]
 }
 
 func runCommand(name string, args ...string) error {

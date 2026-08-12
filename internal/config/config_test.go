@@ -108,10 +108,13 @@ func TestGetDefaultEditor(t *testing.T) {
 			expected: "emacs",
 		},
 		{
-			name:     "both set, EDITOR takes precedence",
+			// POSIX convention: $EDITOR may name a line editor for a dumb
+			// terminal, $VISUAL the full-screen one. This asserted the
+			// inverse, so anyone setting both got the wrong editor.
+			name:     "both set, VISUAL takes precedence",
 			editor:   "vim",
 			visual:   "emacs",
-			expected: "vim",
+			expected: "emacs",
 		},
 	}
 
