@@ -49,7 +49,29 @@ func (p *Parser) Parse() (*HostsFile, error) {
 	lineNum := 0
 	currentCategory := CategoryDefault
 	var categories = make(map[string]*Category)
+	// Categories are emitted in the order they first appear in the file.
+	// Ranging the map directly used Go's randomized iteration order, so every
+	// save reshuffled the whole file.
+	var categoryOrder []string
 	var headerDone bool
+	// Free-standing comment lines seen since the last entry. They attach to the
+	// next entry, or become the footer if the file ends first. Previously they
+	// were simply dropped, so any annotation below the first host line was lost
+	// on the next write.
+	var pendingNotes []string
+
+	ensureCategory := func(name, description string) *Category {
+		category, exists := categories[name]
+		if !exists {
+			category = &Category{Name: name, Enabled: true, Entries: []Entry{}}
+			categories[name] = category
+			categoryOrder = append(categoryOrder, name)
+		}
+		if description != "" && category.Description == "" {
+			category.Description = description
+		}
+		return category
+	}
 
 	for scanner.Scan() {
 		lineNum++
@@ -58,16 +80,11 @@ func (p *Parser) Parse() (*HostsFile, error) {
 
 		if matches := categoryRegex.FindStringSubmatch(line); matches != nil {
 			currentCategory = matches[1]
-			if _, exists := categories[currentCategory]; !exists {
-				categories[currentCategory] = &Category{
-					Name:    currentCategory,
-					Enabled: true,
-					Entries: []Entry{},
-				}
-				if len(matches) > 2 && matches[2] != "" {
-					categories[currentCategory].Description = matches[2]
-				}
+			description := ""
+			if len(matches) > 2 {
+				description = matches[2]
 			}
+			ensureCategory(currentCategory, description)
 			headerDone = true
 			continue
 		}
@@ -80,32 +97,32 @@ func (p *Parser) Parse() (*HostsFile, error) {
 		if entry, isEntry := p.parseEntry(line, lineNum); isEntry {
 			headerDone = true
 			entry.Category = currentCategory
+			entry.Notes = pendingNotes
+			pendingNotes = nil
 
-			if _, exists := categories[currentCategory]; !exists {
-				categories[currentCategory] = &Category{
-					Name:    currentCategory,
-					Enabled: true,
-					Entries: []Entry{},
-				}
-			}
-			categories[currentCategory].Entries = append(categories[currentCategory].Entries, entry)
-		} else if commentLineRegex.MatchString(line) || strings.TrimSpace(line) == "" {
-			if !headerDone {
+			category := ensureCategory(currentCategory, "")
+			category.Entries = append(category.Entries, entry)
+		} else if commentLineRegex.MatchString(line) {
+			if headerDone {
+				pendingNotes = append(pendingNotes, originalLine)
+			} else {
 				hostsFile.Header = append(hostsFile.Header, originalLine)
 			}
-		} else if strings.TrimSpace(line) != "" {
-			if !headerDone {
-				hostsFile.Header = append(hostsFile.Header, originalLine)
-			}
+		} else if !headerDone {
+			hostsFile.Header = append(hostsFile.Header, originalLine)
 		}
 	}
+
+	// Comments trailing the last entry have nothing to attach to, so they are
+	// the file's footer — which Write already knows how to emit.
+	hostsFile.Footer = pendingNotes
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading file: %w", err)
 	}
 
-	for _, category := range categories {
-		hostsFile.Categories = append(hostsFile.Categories, *category)
+	for _, name := range categoryOrder {
+		hostsFile.Categories = append(hostsFile.Categories, *categories[name])
 	}
 
 	if len(hostsFile.Categories) == 0 {
@@ -221,9 +238,17 @@ func (hf *HostsFile) Write(filePath string) error {
 			}
 		}
 
-		// Remove trailing blank lines from header
+		// Remove blank lines from both ends of the header. Trailing blanks are
+		// dropped because the separator below supplies the spacing. Leading
+		// blanks matter for a different reason: re-reading a file we wrote puts
+		// the managed header into hf.Header, and stripping those two lines above
+		// leaves the blank that followed them stranded at the front — so each
+		// save added one more blank line than the last.
 		for len(headerLines) > 0 && strings.TrimSpace(headerLines[len(headerLines)-1]) == "" {
 			headerLines = headerLines[:len(headerLines)-1]
+		}
+		for len(headerLines) > 0 && strings.TrimSpace(headerLines[0]) == "" {
+			headerLines = headerLines[1:]
 		}
 
 		// Write the cleaned header lines
@@ -267,6 +292,13 @@ func (hf *HostsFile) Write(filePath string) error {
 			}
 
 			for _, entry := range category.Entries {
+				// Comment lines that sat above this entry in the source file.
+				for _, note := range entry.Notes {
+					if _, err := writer.WriteString(note + "\n"); err != nil {
+						return fmt.Errorf("failed to write entry note: %w", err)
+					}
+				}
+
 				line := formatEntry(entry)
 				if _, err := writer.WriteString(line + "\n"); err != nil {
 					return fmt.Errorf("failed to write entry: %w", err)
