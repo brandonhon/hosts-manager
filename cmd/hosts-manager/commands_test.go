@@ -586,3 +586,103 @@ func containsStr(slice []string, item string) bool {
 	}
 	return false
 }
+
+// TestExportToHostsRoundTrip guards the category loss: exportToHosts used to
+// emit only "# ==== NAME ====" banners, which the parser treats as decoration,
+// so re-reading an exported hosts file put every entry in "default".
+func TestExportToHostsRoundTrip(t *testing.T) {
+	hf := &hosts.HostsFile{Categories: []hosts.Category{
+		{Name: "development", Description: "Dev stuff", Enabled: true, Entries: []hosts.Entry{
+			{IP: "127.0.0.1", Hostnames: []string{"dev.local"}, Category: "development", Enabled: true},
+		}},
+		{Name: "blocked", Enabled: true, Entries: []hosts.Entry{
+			{IP: "10.0.0.9", Hostnames: []string{"ads.example.com"}, Category: "blocked", Enabled: true},
+		}},
+	}}
+
+	data, err := exportToHosts(hf)
+	if err != nil {
+		t.Fatalf("exportToHosts() error = %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	back, err := hosts.NewParser(path).Parse()
+	if err != nil {
+		t.Fatalf("re-parse error = %v", err)
+	}
+
+	got := map[string]int{}
+	for _, c := range back.Categories {
+		got[c.Name] = len(c.Entries)
+	}
+	for _, want := range []string{"development", "blocked"} {
+		if got[want] != 1 {
+			t.Errorf("category %q has %d entries after round trip, want 1 (all categories: %v)\n%s",
+				want, got[want], got, data)
+		}
+	}
+	if n := got["default"]; n != 0 {
+		t.Errorf("%d entries fell into \"default\"; category markers were not preserved", n)
+	}
+
+	// The description should survive too, since it rides on the @category line.
+	if c := back.GetCategory("development"); c == nil || c.Description != "Dev stuff" {
+		t.Errorf("description lost: %+v", c)
+	}
+}
+
+// TestValidateImportedHosts covers the replace path of `import`, which wrote
+// straight to the hosts file without validating anything.
+func TestValidateImportedHosts(t *testing.T) {
+	tests := []struct {
+		name      string
+		hf        *hosts.HostsFile
+		expectErr bool
+	}{
+		{
+			name: "valid",
+			hf: &hosts.HostsFile{Categories: []hosts.Category{{Name: "custom", Entries: []hosts.Entry{
+				{IP: "127.0.0.1", Hostnames: []string{"ok.local"}, Category: "custom", Enabled: true}}}}},
+		},
+		{
+			name: "comment injects a host mapping",
+			hf: &hosts.HostsFile{Categories: []hosts.Category{{Name: "custom", Entries: []hosts.Entry{
+				{IP: "127.0.0.1", Hostnames: []string{"safe.local"}, Category: "custom", Enabled: true,
+					Comment: "note\n10.0.0.1 evil.example.com"}}}}},
+			expectErr: true,
+		},
+		{
+			name: "invalid ip",
+			hf: &hosts.HostsFile{Categories: []hosts.Category{{Name: "custom", Entries: []hosts.Entry{
+				{IP: "999.999.999.999", Hostnames: []string{"bad.local"}, Category: "custom"}}}}},
+			expectErr: true,
+		},
+		{
+			name: "invalid hostname",
+			hf: &hosts.HostsFile{Categories: []hosts.Category{{Name: "custom", Entries: []hosts.Entry{
+				{IP: "127.0.0.1", Hostnames: []string{"has space.local"}, Category: "custom"}}}}},
+			expectErr: true,
+		},
+		{
+			name: "category name taken from the enclosing category when the entry omits it",
+			hf: &hosts.HostsFile{Categories: []hosts.Category{{Name: "bad category!", Entries: []hosts.Entry{
+				{IP: "127.0.0.1", Hostnames: []string{"ok.local"}}}}}},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateImportedHosts(tt.hf)
+			if tt.expectErr && err == nil {
+				t.Error("expected error but got none")
+			}
+			if !tt.expectErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
