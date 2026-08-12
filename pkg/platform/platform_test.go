@@ -2,6 +2,8 @@ package platform
 
 import (
 	"os"
+	"os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -235,3 +237,95 @@ func TestIsElevated(t *testing.T) {
 }
 
 // Benchmark tests
+
+// TestDirsFollowTheInvokingUserUnderSudo covers the split that made config,
+// backups and audit logs written under sudo land in /root while the same
+// commands run normally used the user's home. Since every writing command
+// needs sudo, that was most of them.
+func TestDirsFollowTheInvokingUserUnderSudo(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("SUDO_USER has no Windows equivalent")
+	}
+
+	me, err := user.Current()
+	if err != nil || me.Username == "" || me.HomeDir == "" {
+		t.Skip("cannot resolve the current user")
+	}
+
+	p := New()
+
+	t.Run("without sudo, HOME is used", func(t *testing.T) {
+		t.Setenv("SUDO_USER", "")
+		t.Setenv("HOME", "/home/someone")
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("XDG_DATA_HOME", "")
+		if got := p.GetConfigDir(); !strings.HasPrefix(got, "/home/someone") {
+			t.Errorf("GetConfigDir() = %q, want it under /home/someone", got)
+		}
+	})
+
+	t.Run("under sudo, the invoking user's home wins over root's HOME", func(t *testing.T) {
+		t.Setenv("SUDO_USER", me.Username)
+		t.Setenv("HOME", "/root") // what sudo actually leaves behind
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("XDG_DATA_HOME", "")
+
+		for name, got := range map[string]string{
+			"GetConfigDir": p.GetConfigDir(),
+			"GetDataDir":   p.GetDataDir(),
+		} {
+			if strings.HasPrefix(got, "/root") {
+				t.Errorf("%s() = %q under sudo; should follow SUDO_USER, not root", name, got)
+			}
+			if !strings.HasPrefix(got, me.HomeDir) {
+				t.Errorf("%s() = %q, want it under %q", name, got, me.HomeDir)
+			}
+		}
+	})
+
+	// The XDG variables are only consulted on Linux; the darwin branch goes
+	// straight to ~/.config and ~/Library. That asymmetry predates this change.
+	if runtime.GOOS != "linux" {
+		return
+	}
+
+	t.Run("under sudo, a stale XDG pointing outside that home is ignored", func(t *testing.T) {
+		t.Setenv("SUDO_USER", me.Username)
+		t.Setenv("HOME", "/root")
+		t.Setenv("XDG_CONFIG_HOME", "/root/.config")
+
+		got := p.GetConfigDir()
+		if strings.HasPrefix(got, "/root") {
+			t.Errorf("GetConfigDir() = %q; root's XDG_CONFIG_HOME should not be trusted under sudo", got)
+		}
+	})
+
+	t.Run("under sudo -E, an XDG inside that home is honored", func(t *testing.T) {
+		custom := filepath.Join(me.HomeDir, "xdg-config")
+		t.Setenv("SUDO_USER", me.Username)
+		t.Setenv("HOME", "/root")
+		t.Setenv("XDG_CONFIG_HOME", custom)
+
+		if got := p.GetConfigDir(); !strings.HasPrefix(got, custom) {
+			t.Errorf("GetConfigDir() = %q, want it under %q — sudo -E keeps the caller's XDG", got, custom)
+		}
+	})
+}
+
+// TestElevateIfNeededRequiresElevation pins the tightened rule: write access to
+// the hosts file is no longer enough on its own.
+func TestElevateIfNeededRequiresElevation(t *testing.T) {
+	p := New()
+	err := p.ElevateIfNeeded()
+
+	if p.IsElevated() {
+		if err != nil {
+			t.Logf("elevated; ElevateIfNeeded() = %v (write may still be blocked)", err)
+		}
+		return
+	}
+
+	if err == nil {
+		t.Error("ElevateIfNeeded() returned nil while not elevated; sudo is supposed to be required")
+	}
+}
