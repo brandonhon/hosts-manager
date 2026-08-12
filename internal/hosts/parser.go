@@ -178,8 +178,12 @@ func (p *Parser) isValidIP(ip string) bool {
 
 func (hf *HostsFile) Write(filePath string) error {
 	return AtomicWrite(filePath, func(file io.Writer) error {
+		// Flushed explicitly at the end of this function, not in a defer. A
+		// deferred flush discards its error, so a write that failed only at
+		// flush time would be reported as success and AtomicWrite would then
+		// commit the short file over the real one — an atomic write of a
+		// truncated hosts file.
 		writer := bufio.NewWriter(file)
-		defer func() { _ = writer.Flush() }()
 
 		// Write managed file header
 		managedHeader := []string{
@@ -280,6 +284,10 @@ func (hf *HostsFile) Write(filePath string) error {
 					return fmt.Errorf("failed to write footer: %w", err)
 				}
 			}
+		}
+
+		if err := writer.Flush(); err != nil {
+			return fmt.Errorf("failed to flush hosts file: %w", err)
 		}
 
 		hf.Modified = time.Now()
