@@ -1,5 +1,7 @@
 name: CI
 
+# Tag pushes are deliberately not handled here — release.yml owns tags. Mixing
+# a tag trigger with the paths filter below made tag-push behaviour erratic.
 on:
   push:
     branches: [ main, develop ]
@@ -10,8 +12,6 @@ on:
       - 'Makefile'
       - '.golangci.yml'
       - '.github/workflows/ci.yml'
-    tags:
-      - 'v*'
   pull_request:
     branches: [ main, develop ]
     paths:
@@ -22,36 +22,39 @@ on:
       - '.golangci.yml'
       - '.github/workflows/ci.yml'
 
+# The repo's default workflow token is read-only; every job here only needs to
+# read the checkout. The one exception is the security job, which uploads SARIF.
+permissions:
+  contents: read
+
+# Supersede in-flight runs for the same ref rather than paying for both.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GO_VERSION: 'stable'
 
 jobs:
   test:
-    name: Test
+    name: Test (${{ matrix.os }})
     strategy:
+      # Report every OS rather than cancelling the others on the first failure.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['stable']
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # setup-go caches the module and build caches by default, keyed on
+      # go.sum — no separate actions/cache step is needed.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.go-version }}-
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Download dependencies
         run: go mod download
@@ -63,16 +66,15 @@ jobs:
         run: make test
 
       - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
-        run: |
-          make coverage
-          
+        if: matrix.os == 'ubuntu-latest'
+        run: make coverage
+
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
+        if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v4
         continue-on-error: true
         with:
-          file: ./build/coverage.out
+          files: ./build/coverage.out
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
@@ -101,6 +103,11 @@ jobs:
   security:
     name: Security
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required by upload-sarif. Without it the upload fails, which was
+      # invisible because the step is continue-on-error.
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -131,14 +138,6 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     needs: [test, lint]
-    strategy:
-      matrix:
-        goos: [linux, windows, darwin]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -150,62 +149,26 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Download dependencies
         run: go mod download
 
+      # A compile check plus a smoke test of the resulting binary. Release
+      # builds are cross-compiled by release.yml, and the test job above
+      # already compiles the tree natively on macOS and Windows, so the
+      # platform-specific files (atomic_unix.go / atomic_windows.go) stay
+      # covered without cross-compiling five targets on every push.
       - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-          COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-          
-          BINARY_NAME=hosts-manager
-          if [ "$GOOS" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-          
-          LDFLAGS="-X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commitHash=${COMMIT_HASH}"
-          
-          mkdir -p build
-          go build -ldflags "${LDFLAGS}" -trimpath -o "build/${BINARY_NAME}" ./cmd/hosts-manager
+        run: make build
 
-      - name: Test binary
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      - name: Smoke test binary
         run: |
           ./build/hosts-manager --version
           ./build/hosts-manager --help
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: hosts-manager-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: build/*
 
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
     needs: [test, lint, security, build]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Quality Gate
-        run: |
-          echo "✅ All quality checks passed!"
-          echo "✅ Tests completed successfully"
-          echo "✅ Linting completed successfully"
-          echo "✅ Security checks completed successfully"
-          echo "✅ Build completed successfully for all platforms"
+        run: echo "All quality checks passed."
