@@ -8,9 +8,14 @@ type Entry struct {
 	IP        string   `json:"ip" yaml:"ip"`
 	Hostnames []string `json:"hostnames" yaml:"hostnames"`
 	Comment   string   `json:"comment,omitempty" yaml:"comment,omitempty"`
-	Category  string   `json:"category" yaml:"category"`
-	Enabled   bool     `json:"enabled" yaml:"enabled"`
-	LineNum   int      `json:"line_num,omitempty" yaml:"line_num,omitempty"`
+	// Notes holds free-standing comment lines that appeared immediately above
+	// this entry, stored verbatim including their leading '#'. Comment is the
+	// trailing comment on the entry's own line; Notes is everything written
+	// above it, which would otherwise be discarded when the file is rewritten.
+	Notes    []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+	Category string   `json:"category" yaml:"category"`
+	Enabled  bool     `json:"enabled" yaml:"enabled"`
+	LineNum  int      `json:"line_num,omitempty" yaml:"line_num,omitempty"`
 }
 
 type Category struct {
