@@ -54,13 +54,20 @@ hosts-manager/
 │   ├── main.go                 # Entry point and root command
 │   └── commands.go             # All CLI subcommands
 ├── internal/                   # Internal packages (not importable)
+│   ├── audit/                  # Security audit logging and rotation
+│   │   └── audit.go            # Logger, rotation, compression
 │   ├── backup/                 # Backup and restore functionality
 │   │   └── backup.go           # Backup manager implementation
 │   ├── config/                 # Configuration system
-│   │   └── config.go           # YAML configuration management
+│   │   ├── config.go           # YAML configuration management
+│   │   └── validator.go        # Schema validation and editor allowlist
+│   ├── errors/                 # Error sanitization for user-facing output
+│   │   └── sanitizer.go        # Strips paths and system detail from errors
 │   ├── hosts/                  # Core hosts file operations
 │   │   ├── types.go            # Data structures and constants
-│   │   └── parser.go           # Hosts file parsing and writing
+│   │   ├── parser.go           # Hosts file parsing and writing
+│   │   ├── validation.go       # Entry, IP, hostname and comment validation
+│   │   └── atomic.go           # Locked temp-file-and-rename writes
 │   └── tui/                    # Terminal user interface
 │       └── tui.go              # Interactive TUI with Bubble Tea
 ├── pkg/                        # Public packages (importable)
@@ -69,9 +76,11 @@ hosts-manager/
 │   └── search/                 # Search functionality
 │       └── search.go           # Fuzzy search algorithms
 ├── build/                      # Build artifacts (gitignored)
-├── dist/                       # Distribution packages (gitignored)
-└── docs/                       # Generated documentation
+└── dist/                       # Distribution packages (gitignored)
 ```
+
+There is no `docs/` directory. `make docs` writes `docs/help.txt`, which
+`.gitignore` excludes, so nothing it produces is ever committed.
 
 ## Key Components
 
@@ -443,15 +452,20 @@ func userFacingOperation() error {
 
 #### Privilege Escalation Pattern
 ```go
-// Check privileges before sensitive operations
+// Check privileges before modifying the hosts file. A dry run needs none, so
+// go through the helper rather than calling ElevateIfNeeded directly.
 func sensitiveOperation() error {
     p := platform.New()
-    if err := p.ElevateIfNeededStrict(); err != nil {
+    if err := requireHostsWriteAccess(p); err != nil {
         return err
     }
     // Perform operation with verified privileges...
 }
 ```
+
+There was an `ElevateIfNeededStrict` documented here as *the* pattern for
+sensitive operations. Nothing ever called it, and it was removed in the
+dead-code pass.
 
 ### Security Testing Requirements
 
