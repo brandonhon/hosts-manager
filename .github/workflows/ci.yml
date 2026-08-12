@@ -1,26 +1,16 @@
 name: CI
 
-# Tag pushes are deliberately not handled here — release.yml owns tags. Mixing
-# a tag trigger with the paths filter below made tag-push behaviour erratic.
+# Tag pushes are deliberately not handled here — release.yml owns tags.
+#
+# No paths filter, on purpose. `Quality Gate` is a required status check for
+# main, and a filtered workflow is *skipped* rather than passed — so a
+# docs-only pull request would never report the check and could never merge.
+# This repo is public, so the extra runs cost nothing.
 on:
   push:
     branches: [ main ]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Makefile'
-      - '.golangci.yml'
-      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main ]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Makefile'
-      - '.golangci.yml'
-      - '.github/workflows/ci.yml'
 
 # The repo's default workflow token is read-only; every job here only needs to
 # read the checkout. The one exception is the security job, which uploads SARIF.
