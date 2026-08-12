@@ -1060,28 +1060,28 @@ func (m *model) viewAdd() string {
 	if m.addField == 0 {
 		ipLabel = selectedStyle.Render("IP Address:")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", ipLabel, m.addIP))
+	fmt.Fprintf(&b, "%s %s\n", ipLabel, m.addIP)
 
 	// Hostnames field
 	hostnamesLabel := "Hostnames:"
 	if m.addField == 1 {
 		hostnamesLabel = selectedStyle.Render("Hostnames:")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", hostnamesLabel, m.addHostnames))
+	fmt.Fprintf(&b, "%s %s\n", hostnamesLabel, m.addHostnames)
 
 	// Comment field
 	commentLabel := "Comment (optional):"
 	if m.addField == 2 {
 		commentLabel = selectedStyle.Render("Comment (optional):")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", commentLabel, m.addComment))
+	fmt.Fprintf(&b, "%s %s\n", commentLabel, m.addComment)
 
 	// Category field
 	categoryLabel := "Category:"
 	if m.addField == 3 {
 		categoryLabel = selectedStyle.Render("Category:")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", categoryLabel, m.addCategory))
+	fmt.Fprintf(&b, "%s %s\n", categoryLabel, m.addCategory)
 
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
@@ -1108,7 +1108,7 @@ func (m *model) viewMove() string {
 		}
 		b.WriteString(moveStyle.Render(entryStr))
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("From category: %s\n\n", entry.category))
+		fmt.Fprintf(&b, "From category: %s\n\n", entry.category)
 	}
 
 	b.WriteString("Select target category:\n")
@@ -1147,14 +1147,14 @@ func (m *model) viewCreateCategory() string {
 	if m.createCategoryField == 0 {
 		nameLabel = selectedStyle.Render("Category Name:")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", nameLabel, m.createCategoryName))
+	fmt.Fprintf(&b, "%s %s\n", nameLabel, m.createCategoryName)
 
 	// Description field
 	descLabel := "Description (optional):"
 	if m.createCategoryField == 1 {
 		descLabel = selectedStyle.Render("Description (optional):")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", descLabel, m.createCategoryDescription))
+	fmt.Fprintf(&b, "%s %s\n", descLabel, m.createCategoryDescription)
 
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Category names can contain: a-z, A-Z, 0-9, _, -"))
@@ -1177,28 +1177,28 @@ func (m *model) viewEdit() string {
 	if m.editField == 0 {
 		ipLabel = selectedStyle.Render("IP Address:")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", ipLabel, m.editIP))
+	fmt.Fprintf(&b, "%s %s\n", ipLabel, m.editIP)
 
 	// Hostnames field
 	hostnamesLabel := "Hostnames (space separated):"
 	if m.editField == 1 {
 		hostnamesLabel = selectedStyle.Render("Hostnames (space separated):")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", hostnamesLabel, m.editHostnames))
+	fmt.Fprintf(&b, "%s %s\n", hostnamesLabel, m.editHostnames)
 
 	// Comment field
 	commentLabel := "Comment (optional):"
 	if m.editField == 2 {
 		commentLabel = selectedStyle.Render("Comment (optional):")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", commentLabel, m.editComment))
+	fmt.Fprintf(&b, "%s %s\n", commentLabel, m.editComment)
 
 	// Category field
 	categoryLabel := "Category:"
 	if m.editField == 3 {
 		categoryLabel = selectedStyle.Render("Category:")
 	}
-	b.WriteString(fmt.Sprintf("%s %s\n", categoryLabel, m.editCategory))
+	fmt.Fprintf(&b, "%s %s\n", categoryLabel, m.editCategory)
 
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))

@@ -543,7 +543,7 @@ func sanitizeForAuditLog(input string) string {
 		case r == '\t':
 			result.WriteString("\\t")
 		case unicode.IsControl(r):
-			result.WriteString(fmt.Sprintf("\\u%04x", r))
+			fmt.Fprintf(&result, "\\u%04x", r)
 		case r == '"':
 			result.WriteString("\\\"")
 		case r == '\\':
