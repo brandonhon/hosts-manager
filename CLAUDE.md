@@ -388,7 +388,10 @@ Hosts Manager implements comprehensive security measures that developers must un
 6. **Audit System** (`internal/audit/audit.go`)
    - Comprehensive logging of all security-relevant operations
    - Structured JSON format with timestamps and integrity checking
-   - Automatic log rotation with compression (10MB default, 5 files retained)
+   - Automatic log rotation with compression (10MB default, 5 files retained).
+     Rotated slots are gzipped, so rotation matches both `audit.log.N.gz` and
+     `audit.log.N` when shifting — matching only the uncompressed name silently
+     reduces retention to a single file.
    - Security violation detection and alerting
 
 ### Security Implementation Guidelines
