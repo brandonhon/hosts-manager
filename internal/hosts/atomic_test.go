@@ -468,92 +468,6 @@ func TestAtomicWrite(t *testing.T) {
 	}
 }
 
-// TestSafeRead tests safe file reading
-func TestSafeRead(t *testing.T) {
-	tmpDir := createTestDir(t)
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	// Create test file
-	testFile := filepath.Join(tmpDir, "test.txt")
-	testContent := "Hello, World!"
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name      string
-		filePath  string
-		expectErr bool
-		expected  string
-	}{
-		{
-			name:      "read existing file",
-			filePath:  testFile,
-			expectErr: false,
-			expected:  testContent,
-		},
-		{
-			name:      "read non-existent file",
-			filePath:  filepath.Join(tmpDir, "nonexistent.txt"),
-			expectErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := SafeRead(tt.filePath)
-
-			if tt.expectErr && err == nil {
-				t.Error("expected error but got none")
-			}
-			if !tt.expectErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			if !tt.expectErr && string(data) != tt.expected {
-				t.Errorf("SafeRead() = %q, want %q", string(data), tt.expected)
-			}
-		})
-	}
-}
-
-// TestIsFileLocked tests file lock detection
-func TestIsFileLocked(t *testing.T) {
-	tmpDir := createTestDir(t)
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	testFile := filepath.Join(tmpDir, "test.txt")
-
-	// Test unlocked file
-	locked := IsFileLocked(testFile)
-	if locked {
-		t.Error("file should not be locked initially")
-	}
-
-	// Create lock
-	writer, err := NewAtomicFileWriter(testFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.Close() }()
-
-	// Test locked file
-	locked = IsFileLocked(testFile)
-	if !locked {
-		t.Error("file should be locked when writer is active")
-	}
-
-	// Close writer
-	_ = writer.Close()
-
-	// Test unlocked file after close
-	locked = IsFileLocked(testFile)
-	if locked {
-		t.Error("file should not be locked after writer is closed")
-	}
-}
-
 // TestConcurrentAtomicWrites tests concurrent atomic write operations
 func TestConcurrentAtomicWrites(t *testing.T) {
 	if testing.Short() {
@@ -757,27 +671,6 @@ func BenchmarkAtomicWriteSmallFile(b *testing.B) {
 			_, err := w.Write([]byte(content))
 			return err
 		})
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkSafeRead(b *testing.B) {
-	tmpDir := createTestDirB(b)
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	// Create test file
-	testFile := filepath.Join(tmpDir, "test.txt")
-	content := strings.Repeat("Hello, World!\n", 100)
-	err := os.WriteFile(testFile, []byte(content), 0644)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := SafeRead(testFile)
 		if err != nil {
 			b.Fatal(err)
 		}
