@@ -132,6 +132,12 @@ func (p *Platform) IsElevated() bool {
 
 // GetConfigDir returns the configuration directory for the invoking user,
 // which under sudo is the account that ran sudo rather than root.
+//
+// XDG_CONFIG_HOME is honored on macOS as well as Linux. macOS previously used
+// the XDG *default* path, ~/.config, while ignoring the variable that is
+// supposed to override it — the worst of both conventions. Someone who sets
+// the variable has stated an intent; the platform default applies when they
+// have not.
 func (p *Platform) GetConfigDir() string {
 	home, viaSudo := invokingUser()
 
@@ -141,12 +147,7 @@ func (p *Platform) GetConfigDir() string {
 			return appdata + `\hosts-manager`
 		}
 		return `C:\ProgramData\hosts-manager`
-	case "darwin":
-		if home != "" {
-			return filepath.Join(home, ".config", "hosts-manager")
-		}
-		return "/etc/hosts-manager"
-	case "linux":
+	case "darwin", "linux":
 		if xdg := xdgDir("XDG_CONFIG_HOME", home, viaSudo); xdg != "" {
 			return filepath.Join(xdg, "hosts-manager")
 		}
@@ -161,7 +162,11 @@ func (p *Platform) GetConfigDir() string {
 
 // GetDataDir returns the data directory — backups and audit logs — for the
 // invoking user, which under sudo is the account that ran sudo rather than
-// root. These belong with the person using the tool: it is a single-user
+// root.
+//
+// XDG_DATA_HOME is honored on macOS too. Unlike the config directory the
+// defaults still differ by platform: ~/Library/Application Support is the macOS
+// convention and stays the default there, and ~/.local/share on Linux. These belong with the person using the tool: it is a single-user
 // utility, and every writing command needs sudo, so anchoring them to root
 // would have put nearly all of them out of reach.
 func (p *Platform) GetDataDir() string {
@@ -174,6 +179,9 @@ func (p *Platform) GetDataDir() string {
 		}
 		return p.GetConfigDir()
 	case "darwin":
+		if xdg := xdgDir("XDG_DATA_HOME", home, viaSudo); xdg != "" {
+			return filepath.Join(xdg, "hosts-manager")
+		}
 		if home != "" {
 			return filepath.Join(home, "Library", "Application Support", "hosts-manager")
 		}

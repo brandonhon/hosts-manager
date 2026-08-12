@@ -81,12 +81,10 @@ func TestGetConfigDir(t *testing.T) {
 			},
 			validate: func(path string) bool {
 				if runtime.GOOS == "windows" {
-					return true // Skip this test on Windows
+					return true // Windows uses APPDATA, not XDG
 				}
-				// On Darwin, XDG_CONFIG_HOME is not used by default - it uses ~/.config
-				if runtime.GOOS == "darwin" {
-					return strings.Contains(path, ".config/hosts-manager")
-				}
+				// Honored on macOS as well as Linux. This used to expect
+				// darwin to ignore the variable and fall back to ~/.config.
 				return strings.HasPrefix(path, "/tmp/custom-config")
 			},
 		},
@@ -283,12 +281,6 @@ func TestDirsFollowTheInvokingUserUnderSudo(t *testing.T) {
 		}
 	})
 
-	// The XDG variables are only consulted on Linux; the darwin branch goes
-	// straight to ~/.config and ~/Library. That asymmetry predates this change.
-	if runtime.GOOS != "linux" {
-		return
-	}
-
 	t.Run("under sudo, a stale XDG pointing outside that home is ignored", func(t *testing.T) {
 		t.Setenv("SUDO_USER", me.Username)
 		t.Setenv("HOME", "/root")
@@ -328,4 +320,52 @@ func TestElevateIfNeededRequiresElevation(t *testing.T) {
 	if err == nil {
 		t.Error("ElevateIfNeeded() returned nil while not elevated; sudo is supposed to be required")
 	}
+}
+
+// TestXDGHonoredOnAllUnixPlatforms pins the consistency: macOS used to take the
+// XDG *default* path (~/.config) while ignoring the variable meant to override
+// it, so a macOS user who set XDG_CONFIG_HOME was silently ignored.
+func TestXDGHonoredOnAllUnixPlatforms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses APPDATA/LOCALAPPDATA, not XDG")
+	}
+
+	p := New()
+	home := t.TempDir()
+	custom := filepath.Join(home, "custom")
+
+	t.Setenv("SUDO_USER", "")
+	t.Setenv("HOME", home)
+
+	t.Run("XDG_CONFIG_HOME overrides the platform default", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", custom)
+		if got := p.GetConfigDir(); got != filepath.Join(custom, "hosts-manager") {
+			t.Errorf("GetConfigDir() = %q, want it under %q on %s", got, custom, runtime.GOOS)
+		}
+	})
+
+	t.Run("XDG_DATA_HOME overrides the platform default", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", custom)
+		if got := p.GetDataDir(); got != filepath.Join(custom, "hosts-manager") {
+			t.Errorf("GetDataDir() = %q, want it under %q on %s", got, custom, runtime.GOOS)
+		}
+	})
+
+	t.Run("unset falls back to the platform default", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("XDG_DATA_HOME", "")
+
+		// Config is ~/.config on both; data differs by platform convention.
+		if got := p.GetConfigDir(); got != filepath.Join(home, ".config", "hosts-manager") {
+			t.Errorf("GetConfigDir() = %q, want ~/.config/hosts-manager", got)
+		}
+
+		wantData := filepath.Join(home, ".local", "share", "hosts-manager")
+		if runtime.GOOS == "darwin" {
+			wantData = filepath.Join(home, "Library", "Application Support", "hosts-manager")
+		}
+		if got := p.GetDataDir(); got != wantData {
+			t.Errorf("GetDataDir() = %q, want %q on %s", got, wantData, runtime.GOOS)
+		}
+	})
 }
