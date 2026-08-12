@@ -326,6 +326,19 @@ func ValidateEntry(entry Entry) error {
 		return fmt.Errorf("invalid comment: %w", err)
 	}
 
+	// Notes are written back verbatim, one per line, above the entry. A note
+	// carrying a line break or missing its '#' would emit a line the parser
+	// reads as a host mapping — the same injection the comment check closes,
+	// reachable through an import file that sets the field directly.
+	for _, note := range entry.Notes {
+		if strings.ContainsAny(note, "\n\r") {
+			return fmt.Errorf("invalid note: cannot contain line breaks")
+		}
+		if !strings.HasPrefix(strings.TrimSpace(note), "#") {
+			return fmt.Errorf("invalid note: must be a comment line beginning with '#'")
+		}
+	}
+
 	// Validate category name
 	if entry.Category != "" {
 		if err := validateCategoryName(entry.Category); err != nil {
