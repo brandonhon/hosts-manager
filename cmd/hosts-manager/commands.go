@@ -19,6 +19,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// requireHostsWriteAccess verifies the privileges needed to modify the hosts
+// file, unless this is a dry run.
+//
+// A dry run writes nothing, so demanding root to preview a change was pure
+// friction — and it made `--dry-run` useless to anyone without sudo, which is
+// the one audience a preview is for.
+func requireHostsWriteAccess(p *platform.Platform) error {
+	if dryRun {
+		return nil
+	}
+	return p.ElevateIfNeeded()
+}
+
 func backupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "backup",
@@ -74,7 +87,7 @@ func restoreCmd() *cobra.Command {
 			}
 
 			p := platform.New()
-			if err := p.ElevateIfNeeded(); err != nil {
+			if err := requireHostsWriteAccess(p); err != nil {
 				return err
 			}
 
@@ -260,7 +273,7 @@ Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
-			if err := p.ElevateIfNeeded(); err != nil {
+			if err := requireHostsWriteAccess(p); err != nil {
 				return err
 			}
 
@@ -334,7 +347,7 @@ Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 			}
 
 			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup {
+			if cfg.General.AutoBackup && !dryRun {
 				if _, err := backupMgr.CreateBackup(); err != nil {
 					return fmt.Errorf("failed to create backup: %w", err)
 				}
@@ -420,7 +433,7 @@ func categoryAddCmd() *cobra.Command {
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
-			if err := p.ElevateIfNeeded(); err != nil {
+			if err := requireHostsWriteAccess(p); err != nil {
 				return err
 			}
 
@@ -437,7 +450,7 @@ func categoryAddCmd() *cobra.Command {
 			}
 
 			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup {
+			if cfg.General.AutoBackup && !dryRun {
 				if _, err := backupMgr.CreateBackup(); err != nil {
 					return fmt.Errorf("failed to create backup: %w", err)
 				}
@@ -549,7 +562,7 @@ func profileActivateCmd() *cobra.Command {
 			}
 
 			p := platform.New()
-			if err := p.ElevateIfNeeded(); err != nil {
+			if err := requireHostsWriteAccess(p); err != nil {
 				return err
 			}
 
@@ -560,7 +573,7 @@ func profileActivateCmd() *cobra.Command {
 			}
 
 			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup {
+			if cfg.General.AutoBackup && !dryRun {
 				if _, err := backupMgr.CreateBackup(); err != nil {
 					return fmt.Errorf("failed to create backup: %w", err)
 				}
@@ -614,12 +627,12 @@ func profileActivateCmd() *cobra.Command {
 
 func toggleCategory(categoryName string, enable bool) error {
 	p := platform.New()
-	if err := p.ElevateIfNeeded(); err != nil {
+	if err := requireHostsWriteAccess(p); err != nil {
 		return err
 	}
 
 	backupMgr := backup.NewManager(cfg)
-	if cfg.General.AutoBackup {
+	if cfg.General.AutoBackup && !dryRun {
 		if _, err := backupMgr.CreateBackup(); err != nil {
 			return fmt.Errorf("failed to create backup: %w", err)
 		}
