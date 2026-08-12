@@ -35,7 +35,9 @@ Download the latest release from the [releases page](https://github.com/brandonh
 #### Linux/macOS
 ```bash
 # Download and install (replace with latest version)
-curl -L -o hosts-manager.tar.gz https://github.com/brandonhon/hosts-manager/releases/latest/download/hosts-manager-v0.2.0-linux-amd64.tar.gz
+# Replace vX.Y.Z with the version from the releases page; /latest/download
+# has no unversioned asset name to fall back on.
+curl -L -o hosts-manager.tar.gz https://github.com/brandonhon/hosts-manager/releases/download/vX.Y.Z/hosts-manager-vX.Y.Z-linux-amd64.tar.gz
 tar -xzf hosts-manager.tar.gz
 sudo mv hosts-manager /usr/local/bin/hosts-manager
 chmod +x /usr/local/bin/hosts-manager
