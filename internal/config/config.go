@@ -166,6 +166,9 @@ func Load() (*Config, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		firstRun = true
 	} else {
+		// configPath is filepath.Join(p.GetConfigDir(), "config.yaml") — built
+		// by this function from the platform config dir, not supplied.
+		// #nosec G304 -- fixed filename under the platform config directory
 		data, err := os.ReadFile(configPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read config file: %w", err)

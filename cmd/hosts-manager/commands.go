@@ -278,6 +278,9 @@ Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 				return fmt.Errorf("import path validation failed: %w", err)
 			}
 
+			// filePath comes from validateFilePathStrict above, which resolves it
+			// and requires it to sit inside one of getAllowedDirectories().
+			// #nosec G304 -- path validated against an allowlist before this point
 			data, err := os.ReadFile(filePath)
 			if err != nil {
 				return fmt.Errorf("failed to read import file: %w", err)
@@ -888,6 +891,13 @@ func runCommand(name string, args ...string) error {
 		logger.LogFileOperation("editor_execution", name, true, "")
 	}
 
+	// The only caller is `config --edit`, which gates name through
+	// config.IsValidEditor first, so it resolves to one of a fixed set of
+	// editor names; args is the config file path this process computed. Nothing
+	// here goes through a shell — exec.Command takes the arguments separately —
+	// so a value like "vim; rm -rf /" would be looked up as a program with that
+	// literal name and fail, rather than being interpreted.
+	// #nosec G204 -- editor checked against an allowlist, no shell involved
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
