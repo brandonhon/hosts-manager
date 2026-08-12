@@ -117,12 +117,17 @@ func TestValidateComment(t *testing.T) {
 		{name: "simple comment", comment: "This is a test server", expectErr: false},
 		{name: "comment with numbers", comment: "Server #1", expectErr: false},
 		{name: "comment with symbols", comment: "API server (production)", expectErr: false},
-		{name: "comment with newlines", comment: "Line 1\nLine 2", expectErr: false},
 		{name: "comment with tabs", comment: "Tabbed\tcomment", expectErr: false},
 		{name: "max length", comment: strings.Repeat("a", 500), expectErr: false},
 
 		// Invalid comments
 		{name: "too long", comment: strings.Repeat("a", 501), expectErr: true},
+		// A line break would split the entry it is appended to, and the text
+		// after the break parses back as a real host mapping.
+		{name: "line feed", comment: "Line 1\nLine 2", expectErr: true},
+		{name: "carriage return", comment: "Line 1\rLine 2", expectErr: true},
+		{name: "crlf", comment: "Line 1\r\nLine 2", expectErr: true},
+		{name: "injected host mapping", comment: "note\n10.0.0.1 evil.example.com", expectErr: true},
 		{name: "script tag", comment: "<script>alert(1)</script>", expectErr: true},
 		{name: "javascript protocol", comment: "javascript:alert(1)", expectErr: true},
 		{name: "data protocol", comment: "data:text/html,<script>alert(1)</script>", expectErr: true},
@@ -580,5 +585,30 @@ func BenchmarkValidateEntry(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = ValidateEntry(testEntry)
+	}
+}
+
+// TestCommentCannotInjectHostMapping is the regression test for the injection
+// itself rather than for the validator in isolation. formatEntry appends a
+// comment to the entry line verbatim, so a line break used to split the entry
+// and the remainder was parsed back as a genuine host mapping.
+func TestCommentCannotInjectHostMapping(t *testing.T) {
+	entry := Entry{
+		IP:        "127.0.0.1",
+		Hostnames: []string{"safe.local"},
+		Comment:   "note\n10.0.0.1 evil.example.com",
+		Category:  "custom",
+		Enabled:   true,
+	}
+
+	if err := ValidateEntry(entry); err == nil {
+		t.Fatal("ValidateEntry accepted a comment containing a line break")
+	}
+
+	// Belt and braces: if the entry ever reached the formatter anyway, show
+	// exactly what the damage would be, so this test documents the mechanism.
+	line := formatEntry(entry)
+	if strings.Count(line, "\n") > 0 {
+		t.Logf("formatEntry would emit %d lines from one entry:\n%s", strings.Count(line, "\n")+1, line)
 	}
 }
