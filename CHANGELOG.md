@@ -1,6 +1,50 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+All notable changes to hosts-manager are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Per-tag [GitHub Releases](https://github.com/brandonhon/hosts-manager/releases) hold the
+full commit-level list; this file curates the highlights and behavior changes. The
+release workflow uses the section for the version being cut as the release body, so a
+stable release cannot be published without one.
+
+Build-infrastructure changes (CI workflows, pinned tool versions) are recorded too, under
+**Changed** and labelled as such. They don't reach the released binaries — they're listed
+so the provenance of a build is auditable from one file.
+
+Entries up to and including `[0.6.1]` were generated automatically from commit messages
+and use inline compare links in their headings. From `[Unreleased]` onward they are
+hand-written, and compare links live in the reference list at the bottom of the file.
+
+## [Unreleased]
+
+### Fixed
+
+- **An unrecognized `$EDITOR` no longer stops the tool from running at all.** The default
+  editor is seeded from your environment, and any value outside a small hardcoded
+  whitelist failed configuration validation — which aborted config loading, which exited
+  every command with an error. `EDITOR=nvim`, `helix`, `micro`, or any absolute path such
+  as `/usr/bin/vim` made even read-only commands like `list` and `search` unusable. An
+  unrecognized editor is now a warning printed once at startup. Nothing is relaxed:
+  `config --edit` still refuses to launch an editor it doesn't recognize, and the editor
+  is never run through a shell.
+
+### Changed
+
+- Build infrastructure: **releases are now cut by pushing a tag rather than by a bot.**
+  `semantic-release` decided versions from commit messages and published on every
+  successful build of `main`; it has been removed along with its configuration. Tagging
+  `vX.Y.Z` now builds the binaries and publishes the release, using this file's section
+  for that version as the release notes with the commit list appended below. Version
+  numbers are a deliberate choice again instead of a side effect of commit prefixes.
+- Build infrastructure: the lint configuration was migrated to golangci-lint v2, which had
+  been failing to load the v1-format config and taking the whole build with it. The linter
+  version is now pinned in both CI and the Makefile, so local and CI linting check the
+  same thing.
+- Build infrastructure: the CI workflow no longer cross-compiles five targets on every
+  push, supersedes its own in-flight runs, and grants the security scan the permission it
+  needs to publish results.
 
 ## [0.6.1](https://github.com/brandonhon/hosts-manager/compare/v0.6.0...v0.6.1) (2025-10-02)
 
@@ -165,4 +209,4 @@ The project previously used 1.x.x versioning during initial development phases. 
 
 ---
 
-*This changelog follows [Conventional Commits](https://conventionalcommits.org) and [Semantic Versioning](https://semver.org/) guidelines.*
+[Unreleased]: https://github.com/brandonhon/hosts-manager/compare/v0.6.1...HEAD
