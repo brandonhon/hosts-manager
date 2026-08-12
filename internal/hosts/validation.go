@@ -262,9 +262,16 @@ func ValidateComment(comment string) error {
 		return fmt.Errorf("comment too long (max 500 characters)")
 	}
 
-	// Check for control characters and potential script injection
+	// A hosts file entry occupies exactly one line, and formatEntry appends the
+	// comment to it verbatim. A line break in a comment therefore splits the
+	// entry, and whatever follows the break is parsed back as a real host
+	// mapping — so a comment can inject an arbitrary hostname. Tabs are fine;
+	// they do not terminate the line.
 	for _, r := range comment {
-		if unicode.IsControl(r) && r != '\t' && r != '\n' && r != '\r' {
+		if r == '\n' || r == '\r' {
+			return fmt.Errorf("comment cannot contain line breaks")
+		}
+		if unicode.IsControl(r) && r != '\t' {
 			return fmt.Errorf("comment contains control characters")
 		}
 	}
