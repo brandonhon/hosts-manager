@@ -154,22 +154,22 @@ func TestRotateLogMultiple(t *testing.T) {
 		}
 	}
 
-	// Verify rotated files exist (but not necessarily all maxLogs)
-	// Since we rotate 5 times but only keep 3, we should have at most 3 files
+	// Rotating more times than maxLogs must leave exactly maxLogs rotated
+	// files. This previously asserted only "at least one, at most maxLogs",
+	// which passed while rotation was in fact keeping exactly one: shifting
+	// matched only the uncompressed name, so every slot beyond .1 was missed.
 	rotatedCount := 0
 	for i := 1; i <= logger.maxLogs; i++ {
 		rotatedPath := filepath.Join(tempDir, fmt.Sprintf("audit.log.%d.gz", i))
 		if _, err := os.Stat(rotatedPath); err == nil {
 			rotatedCount++
+		} else {
+			t.Errorf("rotated log %s is missing", filepath.Base(rotatedPath))
 		}
 	}
 
-	if rotatedCount == 0 {
-		t.Error("Expected at least one rotated log file")
-	}
-
-	if rotatedCount > logger.maxLogs {
-		t.Errorf("Expected at most %d rotated files, got %d", logger.maxLogs, rotatedCount)
+	if rotatedCount != logger.maxLogs {
+		t.Errorf("kept %d rotated files, want exactly %d", rotatedCount, logger.maxLogs)
 	}
 
 	// Verify older logs beyond maxLogs don't exist
@@ -549,4 +549,120 @@ func BenchmarkCompressLog(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestRotationRetainsMaxLogs is the regression test for the retention bug:
+// rotated logs are compressed, but the shift step matched only the
+// uncompressed name, so no slot was ever found, every shift was a no-op, and
+// audit.log.1.gz was overwritten on each rotation. Whatever maxLogs said, one
+// rotated log survived.
+func TestRotationRetainsMaxLogs(t *testing.T) {
+	const maxLogs = 5
+	tempDir := t.TempDir()
+	logger := &Logger{
+		logPath:    filepath.Join(tempDir, "audit.log"),
+		enabled:    true,
+		minLevel:   SeverityInfo,
+		maxLogSize: 512,
+		maxLogs:    maxLogs,
+	}
+
+	// Rotate well past maxLogs so the oldest slots must be evicted, and label
+	// each generation so the ordering can be checked afterwards.
+	const rotations = maxLogs + 3
+	for i := 1; i <= rotations; i++ {
+		if err := os.WriteFile(logger.logPath, []byte(fmt.Sprintf("generation %d\n", i)), 0600); err != nil {
+			t.Fatalf("write generation %d: %v", i, err)
+		}
+		if err := logger.rotateLog(); err != nil {
+			t.Fatalf("rotateLog at generation %d: %v", i, err)
+		}
+	}
+
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found []string
+	for _, e := range entries {
+		found = append(found, e.Name())
+	}
+
+	if len(found) != maxLogs {
+		t.Errorf("directory holds %d files, want %d: %v", len(found), maxLogs, found)
+	}
+
+	// Slot i must hold the i-th most recent generation, newest in .1.
+	for i := 1; i <= maxLogs; i++ {
+		path := logger.rotatedLogName(i, true)
+		got, err := readGzip(t, path)
+		if err != nil {
+			t.Errorf("slot %d (%s): %v", i, filepath.Base(path), err)
+			continue
+		}
+		want := fmt.Sprintf("generation %d\n", rotations-i+1)
+		if got != want {
+			t.Errorf("slot %d holds %q, want %q", i, got, want)
+		}
+	}
+
+	// Nothing should survive past the retention limit.
+	for _, compressed := range []bool{true, false} {
+		beyond := logger.rotatedLogName(maxLogs+1, compressed)
+		if _, err := os.Stat(beyond); !os.IsNotExist(err) {
+			t.Errorf("%s should have been evicted", filepath.Base(beyond))
+		}
+	}
+}
+
+// TestRotationShiftsUncompressedSlots covers the other half: compression is
+// best-effort, so a slot can legitimately hold a plain file, and shifting must
+// carry that form along too.
+func TestRotationShiftsUncompressedSlots(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := &Logger{
+		logPath:    filepath.Join(tempDir, "audit.log"),
+		enabled:    true,
+		minLevel:   SeverityInfo,
+		maxLogSize: 512,
+		maxLogs:    3,
+	}
+
+	// Simulate a previous rotation whose compression failed.
+	plain := logger.rotatedLogName(1, false)
+	if err := os.WriteFile(plain, []byte("uncompressed generation\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(logger.logPath, []byte("current\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.rotateLog(); err != nil {
+		t.Fatalf("rotateLog: %v", err)
+	}
+
+	moved := logger.rotatedLogName(2, false)
+	data, err := os.ReadFile(moved)
+	if err != nil {
+		t.Fatalf("uncompressed slot was not shifted to %s: %v", filepath.Base(moved), err)
+	}
+	if string(data) != "uncompressed generation\n" {
+		t.Errorf("shifted slot holds %q", data)
+	}
+}
+
+func readGzip(t *testing.T, path string) (string, error) {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = zr.Close() }()
+	b, err := io.ReadAll(zr)
+	return string(b), err
 }
