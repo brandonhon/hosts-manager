@@ -98,12 +98,12 @@ func addCmd() *cobra.Command {
 			}
 
 			p := platform.New()
-			if err := p.ElevateIfNeeded(); err != nil {
+			if err := requireHostsWriteAccess(p); err != nil {
 				return err
 			}
 
 			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup {
+			if cfg.General.AutoBackup && !dryRun {
 				if _, err := backupMgr.CreateBackup(); err != nil {
 					return fmt.Errorf("failed to create backup: %w", err)
 				}
@@ -229,12 +229,12 @@ func deleteCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
-			if err := p.ElevateIfNeeded(); err != nil {
+			if err := requireHostsWriteAccess(p); err != nil {
 				return err
 			}
 
 			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup {
+			if cfg.General.AutoBackup && !dryRun {
 				if _, err := backupMgr.CreateBackup(); err != nil {
 					return fmt.Errorf("failed to create backup: %w", err)
 				}
@@ -299,12 +299,12 @@ func disableCmd() *cobra.Command {
 
 func toggleEntry(hostname string, enable bool) error {
 	p := platform.New()
-	if err := p.ElevateIfNeeded(); err != nil {
+	if err := requireHostsWriteAccess(p); err != nil {
 		return err
 	}
 
 	backupMgr := backup.NewManager(cfg)
-	if cfg.General.AutoBackup {
+	if cfg.General.AutoBackup && !dryRun {
 		if _, err := backupMgr.CreateBackup(); err != nil {
 			return fmt.Errorf("failed to create backup: %w", err)
 		}
