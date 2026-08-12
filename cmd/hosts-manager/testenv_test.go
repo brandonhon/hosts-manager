@@ -1,4 +1,4 @@
-package cli
+package main
 
 import (
 	"os"
@@ -10,7 +10,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestContext provides isolated testing environment for CLI commands
+// TestContext provides an isolated testing environment for CLI commands.
+//
+// This lived in an internal/cli package that nothing else imported, which
+// meant a non-test file imported "testing" and would have registered test
+// flags into any binary that pulled the package in. It is test-only fixture
+// code, so it belongs in a _test.go file next to the tests that use it.
 type TestContext struct {
 	// TempDir is the root temporary directory for this test
 	TempDir string
@@ -35,7 +40,7 @@ type TestContext struct {
 }
 
 // SetupTestEnvironment creates an isolated test environment with temporary directories
-func SetupTestEnvironment(t *testing.T) *TestContext {
+func setupTestEnvironment(t *testing.T) *TestContext {
 	t.Helper()
 
 	// Create temporary directory

@@ -15,8 +15,3 @@ func platformAcquireLock(fd int) error {
 func platformReleaseLock(fd int) error {
 	return syscall.Flock(fd, syscall.LOCK_UN)
 }
-
-// platformAcquireSharedLock acquires a shared lock on the file
-func platformAcquireSharedLock(fd int) error {
-	return syscall.Flock(fd, syscall.LOCK_SH|syscall.LOCK_NB)
-}
