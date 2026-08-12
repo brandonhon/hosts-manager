@@ -184,7 +184,10 @@ jobs:
           if [ -s release-body.md ]; then
             echo "Extracted CHANGELOG section for $ver:"; cat release-body.md
           else
-            echo "No CHANGELOG section for $ver; release notes will be the generated commit list only." > release-body.md
+            # Leave the file empty so generate_release_notes supplies the whole
+            # body. Writing this note *into* it put a diagnostic at the top of
+            # the published release, which is what happened on v0.7.0-rc.1.
+            echo "No CHANGELOG section for $ver; release notes will be the generated commit list only."
           fi
 
       - name: Create Release
