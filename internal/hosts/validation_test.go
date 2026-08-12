@@ -18,7 +18,9 @@ func TestValidateIP(t *testing.T) {
 		{name: "private IPv4 10.x", ip: "10.0.0.1", expectErr: false},
 		{name: "private IPv4 172.x", ip: "172.16.0.1", expectErr: false},
 		{name: "public IPv4", ip: "8.8.8.8", expectErr: false},
-		{name: "edge case 0.0.0.0", ip: "0.0.0.0", expectErr: true}, // Unspecified
+		// The standard blocking idiom, and what the shipped "blocked" category is for.
+		{name: "unspecified IPv4 0.0.0.0", ip: "0.0.0.0", expectErr: false},
+		{name: "unspecified IPv6 ::", ip: "::", expectErr: false},
 		{name: "edge case 255.255.255.255", ip: "255.255.255.255", expectErr: false},
 
 		// Valid IPv6 addresses
@@ -308,12 +310,12 @@ func TestValidateIPSecurity(t *testing.T) {
 		{name: "public IP", ip: "8.8.8.8", expectErr: false},
 		{name: "IPv6 localhost", ip: "::1", expectErr: false},
 		{name: "IPv6 private", ip: "fc00::1", expectErr: false},
+		{name: "unspecified IPv4 blackholes a host", ip: "0.0.0.0", expectErr: false},
+		{name: "unspecified IPv6 blackholes a host", ip: "::", expectErr: false},
 
 		// Should be rejected
 		{name: "multicast IPv4", ip: "224.0.0.1", expectErr: true},
-		{name: "unspecified IPv4", ip: "0.0.0.0", expectErr: true},
 		{name: "IPv6 multicast", ip: "ff02::1", expectErr: true},
-		{name: "IPv6 unspecified", ip: "::", expectErr: true},
 	}
 
 	for _, tt := range tests {
