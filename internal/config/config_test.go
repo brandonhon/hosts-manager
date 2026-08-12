@@ -44,10 +44,9 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected %d profiles, got %d", len(expectedProfiles), len(config.Profiles))
 	}
 
-	// Test default profile
-	defaultProfile := config.GetActiveProfile()
-	if defaultProfile != "full" {
-		t.Errorf("Expected active profile to be 'full', got %s", defaultProfile)
+	// The "full" profile is the one marked default.
+	if !config.Profiles["full"].Default {
+		t.Error("Expected the \"full\" profile to be the default")
 	}
 
 	// Test UI settings
@@ -210,49 +209,6 @@ func TestLoadInvalidConfig(t *testing.T) {
 	err := yaml.Unmarshal([]byte(invalidYAML), &config)
 	if err == nil {
 		t.Error("Expected error when unmarshaling invalid YAML")
-	}
-}
-
-func TestConfigMethods(t *testing.T) {
-	config := DefaultConfig()
-
-	// Test GetCategoryDescription
-	desc := config.GetCategoryDescription("development")
-	if desc == "" {
-		t.Error("Expected non-empty description for development category")
-	}
-
-	desc = config.GetCategoryDescription("nonexistent")
-	expected := "User-defined category"
-	if desc != expected {
-		t.Errorf("Expected '%s' for nonexistent category, got '%s'", expected, desc)
-	}
-
-	// Test IsValidCategory
-	if !config.IsValidCategory("development") {
-		t.Error("Expected development to be a valid category")
-	}
-
-	if config.IsValidCategory("nonexistent") {
-		t.Error("Expected nonexistent to be invalid category")
-	}
-
-	// Test GetActiveProfile
-	activeProfile := config.GetActiveProfile()
-	if activeProfile != "full" {
-		t.Errorf("Expected active profile to be 'full', got '%s'", activeProfile)
-	}
-
-	// Test with no default profile
-	for name := range config.Profiles {
-		profile := config.Profiles[name]
-		profile.Default = false
-		config.Profiles[name] = profile
-	}
-
-	activeProfile = config.GetActiveProfile()
-	if activeProfile != "full" {
-		t.Errorf("Expected fallback active profile to be 'full', got '%s'", activeProfile)
 	}
 }
 

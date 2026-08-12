@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brandonhon/hosts-manager/internal/cli"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
 )
 
@@ -155,7 +154,7 @@ func TestAddEntry(t *testing.T) {
 				t.Skip("Skipping validation test in short mode")
 			}
 
-			ctx := cli.SetupTestEnvironment(t)
+			ctx := setupTestEnvironment(t)
 
 			// Perform add operation
 			hf := ctx.ParseHostsFile()
@@ -206,7 +205,7 @@ func TestAddEntry(t *testing.T) {
 
 // TestDeleteEntry tests deleting entries from hosts file
 func TestDeleteEntry(t *testing.T) {
-	ctx := cli.SetupTestEnvironment(t)
+	ctx := setupTestEnvironment(t)
 
 	// Verify initial state
 	ctx.AssertEntryExists("127.0.0.1", "dev.local")
@@ -225,7 +224,7 @@ func TestDeleteEntry(t *testing.T) {
 
 // TestEnableDisableEntries tests enabling and disabling entries
 func TestEnableDisableEntries(t *testing.T) {
-	ctx := cli.SetupTestEnvironment(t)
+	ctx := setupTestEnvironment(t)
 
 	// Parse hosts file
 	hf := ctx.ParseHostsFile()
@@ -279,7 +278,7 @@ func TestEnableDisableEntries(t *testing.T) {
 // TestCategoryOperations tests category-related operations
 func TestCategoryOperations(t *testing.T) {
 	t.Run("add category", func(t *testing.T) {
-		ctx := cli.SetupTestEnvironment(t)
+		ctx := setupTestEnvironment(t)
 
 		hf := ctx.ParseHostsFile()
 
@@ -307,7 +306,7 @@ func TestCategoryOperations(t *testing.T) {
 	})
 
 	t.Run("list categories", func(t *testing.T) {
-		ctx := cli.SetupTestEnvironment(t)
+		ctx := setupTestEnvironment(t)
 
 		hf := ctx.ParseHostsFile()
 
@@ -331,7 +330,7 @@ func TestCategoryOperations(t *testing.T) {
 	})
 
 	t.Run("disable category", func(t *testing.T) {
-		ctx := cli.SetupTestEnvironment(t)
+		ctx := setupTestEnvironment(t)
 
 		hf := ctx.ParseHostsFile()
 
@@ -363,7 +362,7 @@ func TestCategoryOperations(t *testing.T) {
 
 // TestSearch tests the search functionality
 func TestSearch(t *testing.T) {
-	ctx := cli.SetupTestEnvironment(t)
+	ctx := setupTestEnvironment(t)
 
 	hf := ctx.ParseHostsFile()
 
@@ -426,7 +425,7 @@ func TestSearch(t *testing.T) {
 
 // TestBackupRestore tests backup and restore functionality
 func TestBackupRestore(t *testing.T) {
-	ctx := cli.SetupTestEnvironment(t)
+	ctx := setupTestEnvironment(t)
 
 	// Get initial content
 	initialContent := ctx.ReadHostsFile()
@@ -474,7 +473,7 @@ func TestBackupRestore(t *testing.T) {
 
 // TestImportExport tests import and export functionality
 func TestImportExport(t *testing.T) {
-	ctx := cli.SetupTestEnvironment(t)
+	ctx := setupTestEnvironment(t)
 
 	// Export current hosts file
 	exportFile := filepath.Join(ctx.TempDir, "export.yaml")
@@ -504,7 +503,7 @@ func TestImportExport(t *testing.T) {
 
 // TestConfigOperations tests configuration operations
 func TestConfigOperations(t *testing.T) {
-	ctx := cli.SetupTestEnvironment(t)
+	ctx := setupTestEnvironment(t)
 
 	t.Run("load config", func(t *testing.T) {
 		cfg := ctx.LoadConfig()

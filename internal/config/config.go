@@ -234,24 +234,3 @@ func Save(config *Config) error {
 
 	return nil
 }
-
-func (c *Config) GetCategoryDescription(name string) string {
-	if desc, exists := c.Categories[name]; exists {
-		return desc
-	}
-	return "User-defined category"
-}
-
-func (c *Config) IsValidCategory(name string) bool {
-	_, exists := c.Categories[name]
-	return exists
-}
-
-func (c *Config) GetActiveProfile() string {
-	for name, profile := range c.Profiles {
-		if profile.Default {
-			return name
-		}
-	}
-	return "full"
-}

@@ -56,23 +56,3 @@ func platformReleaseLock(fd int) error {
 	}
 	return nil
 }
-
-// platformAcquireSharedLock acquires a shared lock on the file
-func platformAcquireSharedLock(fd int) error {
-	handle := syscall.Handle(fd)
-	var overlapped syscall.Overlapped
-
-	ret, _, err := procLockFileEx.Call(
-		uintptr(handle),
-		uintptr(LOCKFILE_FAIL_IMMEDIATELY), // No exclusive flag = shared lock
-		uintptr(0),
-		uintptr(0xFFFFFFFF),
-		uintptr(0xFFFFFFFF),
-		uintptr(unsafe.Pointer(&overlapped)),
-	)
-
-	if ret == 0 {
-		return err
-	}
-	return nil
-}
