@@ -33,6 +33,10 @@ PLATFORMS=windows/amd64 darwin/amd64 darwin/arm64 linux/amd64 linux/arm64
 # golangci-lint v2 is required: .golangci.yml uses the v2 schema, which v1
 # cannot parse. Keep this in sync with .github/workflows/ci.yml.
 GOLANGCI_VERSION=v2.11.4
+# Upstream gosec is securego/gosec, not securecodewarrior/gosec -- the latter
+# does not exist, which is why the scanner silently never ran. Keep in sync
+# with GOSEC_VERSION in .github/workflows/ci.yml.
+GOSEC_VERSION=v2.28.0
 
 .PHONY: all build build-dev clean test coverage bench lint lint-fast lint-fix fmt vet deps deps-update help install uninstall release dist run run-tui run-list run-help docker-build docker-run security security-gosec security-nancy security-govulncheck security-semgrep security-license security-sbom security-container security-audit docs install-linters install-security-tools install-dev-tools init check-updates validate validate-fast validate-full pre-commit quality-gate pre-release dev ci ci-full
 
@@ -330,14 +334,14 @@ install-linters:
 install-security-tools:
 	@echo "Installing security tools..."
 	@if ! command -v gosec >/dev/null 2>&1; then \
-		echo "Installing gosec..."; \
-		GO111MODULE=on go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+		echo "Installing gosec $(GOSEC_VERSION)..."; \
+		GO111MODULE=on go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); \
 	else \
 		echo "gosec already installed"; \
 	fi
 	@if ! command -v nancy >/dev/null 2>&1; then \
 		echo "Installing nancy..."; \
-		GO111MODULE=on go install github.com/sonatypecommunity/nancy@latest; \
+		GO111MODULE=on go install github.com/sonatype-nexus-community/nancy@latest; \
 	else \
 		echo "nancy already installed"; \
 	fi
