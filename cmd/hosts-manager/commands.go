@@ -296,6 +296,22 @@ Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 				return fmt.Errorf("failed to parse import file: %w", err)
 			}
 
+			// A file containing literal "null" unmarshals to a nil pointer
+			// without erroring.
+			if importedHosts == nil {
+				return fmt.Errorf("import file contains no hosts data")
+			}
+
+			// Validate before writing anything. The merge path below reaches
+			// AddEntry, which validates, but the replace path went straight to
+			// Write -- so an import file could carry values no other code path
+			// would accept, including a comment with an embedded newline that
+			// re-parses as an extra host mapping. Reject the whole file rather
+			// than importing it partially.
+			if err := validateImportedHosts(importedHosts); err != nil {
+				return err
+			}
+
 			if merge {
 				parser := hosts.NewParser(p.GetHostsFilePath())
 				currentHosts, err := parser.Parse()
@@ -640,6 +656,27 @@ func toggleCategory(categoryName string, enable bool) error {
 	return nil
 }
 
+// validateImportedHosts runs every entry in an imported file through the same
+// validation an interactively added entry gets. Category names are checked too,
+// since an imported category name reaches the hosts file as an @category marker.
+func validateImportedHosts(hostsFile *hosts.HostsFile) error {
+	for _, category := range hostsFile.Categories {
+		for _, entry := range category.Entries {
+			// An entry carries its own category, but the enclosing category is
+			// what the writer actually groups by, so check that name as well.
+			candidate := entry
+			if candidate.Category == "" {
+				candidate.Category = category.Name
+			}
+			if err := hosts.ValidateEntry(candidate); err != nil {
+				return fmt.Errorf("invalid imported entry %s (%s): %w",
+					candidate.IP, strings.Join(candidate.Hostnames, " "), err)
+			}
+		}
+	}
+	return nil
+}
+
 func exportToHosts(hostsFile *hosts.HostsFile) ([]byte, error) {
 	var builder strings.Builder
 
@@ -655,6 +692,15 @@ func exportToHosts(hostsFile *hosts.HostsFile) ([]byte, error) {
 		if !category.Enabled || len(category.Entries) == 0 {
 			continue
 		}
+
+		// The @category marker is what the parser reads back; the banner below
+		// it is decoration. Without the marker an exported hosts file re-parses
+		// with every entry in the default category.
+		categoryHeader := fmt.Sprintf("# @category %s", category.Name)
+		if category.Description != "" {
+			categoryHeader += " " + category.Description
+		}
+		builder.WriteString(categoryHeader + "\n")
 
 		fmt.Fprintf(&builder, "# =============== %s ===============\n", strings.ToUpper(category.Name))
 
