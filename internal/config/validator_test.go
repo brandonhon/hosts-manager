@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -670,7 +671,7 @@ func TestHelperFunctions(t *testing.T) {
 	// Test isValidEditor
 	validEditors := []string{"nano", "vim", "vi", "emacs", "code", "notepad", "notepad++", "sublime_text", "atom", "gedit", "kate"}
 	for _, editor := range validEditors {
-		if !isValidEditor(editor) {
+		if !IsValidEditor(editor) {
 			t.Errorf("Expected '%s' to be valid editor", editor)
 		}
 	}
@@ -678,7 +679,7 @@ func TestHelperFunctions(t *testing.T) {
 	// Test editors with .exe extension (Windows)
 	windowsEditors := []string{"notepad.exe", "code.exe", "vim.exe"}
 	for _, editor := range windowsEditors {
-		if !isValidEditor(editor) {
+		if !IsValidEditor(editor) {
 			t.Errorf("Expected '%s' to be valid Windows editor", editor)
 		}
 	}
@@ -698,7 +699,7 @@ func TestHelperFunctions(t *testing.T) {
 		"invalid@editor",
 	}
 	for _, editor := range invalidEditors {
-		if isValidEditor(editor) {
+		if IsValidEditor(editor) {
 			t.Errorf("Expected '%s' to be invalid editor", editor)
 		}
 	}
@@ -854,7 +855,70 @@ func BenchmarkIsValidEditor(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, editor := range editors {
-			isValidEditor(editor)
+			IsValidEditor(editor)
 		}
+	}
+}
+
+// TestIsValidEditorIsOneImplementation pins the behaviors that the two former
+// copies disagreed on. The validator split on whitespace and the command took
+// the path base, so each accepted what the other rejected, and neither handled
+// a full path carrying arguments.
+func TestIsValidEditorIsOneImplementation(t *testing.T) {
+	tests := []struct {
+		editor string
+		want   bool
+		note   string
+	}{
+		{"vim", true, "bare name"},
+		{"/usr/bin/vim", true, "full path — the validator used to reject this"},
+		{"code --wait", true, "arguments — the command used to reject this"},
+		{"/usr/bin/vim -u NONE", true, "full path with arguments — both used to reject this"},
+		{"VIM", true, "case-insensitive"},
+		{"nvim", false, "not in the allow list"},
+		{"", false, "empty"},
+		{"   ", false, "whitespace only"},
+		{"evil; rm -rf /", false, "command separator"},
+		{"vim && rm -rf /", false, "conditional"},
+		{"vim | tee /etc/passwd", false, "pipe"},
+		{"vim `id`", false, "backtick substitution"},
+		{"vim $(id)", false, "dollar substitution"},
+		{"vim\nrm -rf /", false, "embedded newline"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.note, func(t *testing.T) {
+			if got := IsValidEditor(tt.editor); got != tt.want {
+				t.Errorf("IsValidEditor(%q) = %v, want %v (%s)", tt.editor, got, tt.want, tt.note)
+			}
+		})
+	}
+
+	// Path splitting follows the host's separator, which is the correct
+	// behavior: a Windows path is only runnable on Windows, so accepting it
+	// elsewhere would just defer the failure to exec time.
+	t.Run("windows path resolves on windows only", func(t *testing.T) {
+		got := IsValidEditor(`C:\tools\notepad.exe`)
+		if want := runtime.GOOS == "windows"; got != want {
+			t.Errorf("IsValidEditor(windows path) = %v on %s, want %v", got, runtime.GOOS, want)
+		}
+	})
+}
+
+func TestGetDefaultEditorPrefersVisual(t *testing.T) {
+	t.Setenv("EDITOR", "vim")
+	t.Setenv("VISUAL", "code")
+	if got := getDefaultEditor(); got != "code" {
+		t.Errorf("getDefaultEditor() = %q, want %q — $VISUAL takes precedence over $EDITOR", got, "code")
+	}
+
+	t.Setenv("VISUAL", "")
+	if got := getDefaultEditor(); got != "vim" {
+		t.Errorf("with VISUAL unset, getDefaultEditor() = %q, want %q", got, "vim")
+	}
+
+	t.Setenv("EDITOR", "")
+	if got := getDefaultEditor(); got != "nano" {
+		t.Errorf("with neither set, getDefaultEditor() = %q, want %q", got, "nano")
 	}
 }

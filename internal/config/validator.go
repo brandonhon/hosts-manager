@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -75,7 +77,7 @@ func (v *ConfigValidator) validateGeneral(general *General) {
 	// `config --edit`, which re-checks the editor and refuses to launch an
 	// unrecognized one. Rejecting it here would make an unusable $EDITOR
 	// abort config loading, and with it every command the tool offers.
-	if general.Editor != "" && !isValidEditor(general.Editor) {
+	if general.Editor != "" && !IsValidEditor(general.Editor) {
 		v.addWarning("general.editor: %q is not a recognized editor; `hosts-manager config --edit` will refuse to launch it", general.Editor)
 	}
 }
@@ -264,42 +266,68 @@ func isValidFormatName(name string) bool {
 	return matched
 }
 
-func isValidEditor(editor string) bool {
-	// Use the same validation as in commands.go
-	allowedEditors := map[string]bool{
-		"nano":         true,
-		"vim":          true,
-		"vi":           true,
-		"emacs":        true,
-		"code":         true,
-		"notepad":      true,
-		"notepad++":    true,
-		"sublime_text": true,
-		"atom":         true,
-		"gedit":        true,
-		"kate":         true,
-	}
+var allowedEditors = map[string]bool{
+	"nano":         true,
+	"vim":          true,
+	"vi":           true,
+	"emacs":        true,
+	"code":         true,
+	"notepad":      true,
+	"notepad++":    true,
+	"sublime_text": true,
+	"atom":         true,
+	"gedit":        true,
+	"kate":         true,
+}
 
+// IsValidEditor reports whether an editor command is one this tool is willing
+// to launch. It is the single implementation: `config --edit` and the config
+// validator both call it, so a value cannot be accepted in one place and
+// rejected in the other.
+//
+// There used to be two copies that disagreed in both directions — the
+// validator rejected "/usr/bin/vim" while the command accepted it, and the
+// command rejected "code --wait" while the validator accepted it — because one
+// split on whitespace and the other took the path base. Neither handled both,
+// so "/usr/bin/vim -u NONE" was rejected everywhere.
+//
+// An unrecognized editor is not fatal; Load reports it as a warning. This gate
+// is what stops it actually being run.
+func IsValidEditor(editor string) bool {
 	editorCmd := strings.TrimSpace(editor)
-
-	// Check for suspicious characters
-	suspiciousChars := []string{";", "&", "|", "`", "$", "&&", "||", "\n", "\r"}
-	for _, char := range suspiciousChars {
-		if strings.Contains(editorCmd, char) {
-			return false
-		}
-	}
-
-	// Extract base command name
-	parts := strings.Fields(editorCmd)
-	if len(parts) == 0 {
+	if editorCmd == "" {
 		return false
 	}
 
-	baseName := strings.ToLower(parts[0])
+	// Reject anything that would change the meaning of the command if it ever
+	// reached a shell. runCommand does not use one, but the editor string
+	// comes from the environment and this is cheap insurance.
+	if strings.ContainsAny(editorCmd, ";&|`$\n\r") {
+		return false
+	}
+
+	// Take the first field, then its path base: handles a bare name, a full
+	// path, arguments, and a full path with arguments.
+	fields := strings.Fields(editorCmd)
+	if len(fields) == 0 {
+		return false
+	}
+
+	baseName := strings.ToLower(filepath.Base(fields[0]))
 	baseName = strings.TrimSuffix(baseName, ".exe")
 
 	return allowedEditors[baseName]
+}
+
+// AllowedEditors returns the editor names this tool will launch, sorted, for
+// use in user-facing messages.
+func AllowedEditors() []string {
+	names := make([]string, 0, len(allowedEditors))
+	for name := range allowedEditors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func isValidKeyBinding(key string) bool {
