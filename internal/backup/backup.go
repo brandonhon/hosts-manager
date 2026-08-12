@@ -344,41 +344,73 @@ func min(a, b int) int {
 	return b
 }
 
-// VerifyBackupIntegrity verifies the integrity of a backup file
+// VerifyBackupIntegrity checks that a backup can still be read back in full:
+// it must be non-empty, and a compressed backup must decompress cleanly, which
+// is where a truncated or corrupt archive fails.
+//
+// It cannot detect deliberate tampering. No hash is recorded when a backup is
+// taken, so there is nothing to compare a later hash against — an attacker who
+// replaced a backup wholesale would produce a file that reads back perfectly.
+// Detecting that would need the hash stored out of band at creation time.
+//
+// This previously hashed the file, then hashed the same file again through
+// getBackupInfo and compared the two — a comparison that was true by
+// construction and could never fail. It did reject corrupt archives, but only
+// incidentally, because both reads had to succeed before the pointless
+// comparison happened. An empty backup passed. The check is now the one that
+// was being performed by accident, stated deliberately.
 func (m *Manager) VerifyBackupIntegrity(filePath string) error {
-	// Get expected hash from our records
-	backupInfo, err := m.getBackupInfo(filePath)
+	stat, err := os.Stat(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to get backup info: %w", err)
+		return fmt.Errorf("failed to stat backup: %w", err)
+	}
+	if stat.Size() == 0 {
+		return fmt.Errorf("backup is empty: %s", filePath)
 	}
 
-	// Calculate current hash
-	currentHash, err := m.calculateFileHash(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to calculate current hash: %w", err)
-	}
-
-	// Compare hashes
-	if currentHash != backupInfo.Hash {
-		return fmt.Errorf("backup integrity check failed: hash mismatch for %s", filePath)
+	// calculateFileHash reads the file end to end, decompressing gzip backups
+	// as it goes, so a truncated or corrupt archive surfaces here.
+	if _, err := m.calculateFileHash(filePath); err != nil {
+		return fmt.Errorf("backup is unreadable: %w", err)
 	}
 
 	return nil
 }
 
-// CreateSecureBackup creates a backup with enhanced security features
+// CreateSecureBackup creates a backup and verifies that its contents match the
+// hosts file it was taken from, deleting it if they do not.
+//
+// The comparison is against the source rather than against the backup itself,
+// which is the only reference available that makes the check mean anything. It
+// catches a partial or truncated copy — a real risk, since copyFile discards
+// the error from closing the gzip writer, so a failed flush would otherwise
+// leave a short backup that looks fine.
+//
+// The hosts file is read again after the copy, so a change to it in that window
+// shows up as a mismatch. That is the intended outcome: a backup taken while
+// the file was being modified should not be trusted.
 func (m *Manager) CreateSecureBackup() (string, error) {
-	// First create the backup normally
 	backupPath, err := m.CreateBackup()
 	if err != nil {
 		return "", err
 	}
 
-	// Verify the backup integrity immediately after creation
-	if err := m.VerifyBackupIntegrity(backupPath); err != nil {
-		// If verification fails, securely delete the bad backup
+	sourceHash, err := m.calculateFileHash(m.platform.GetHostsFilePath())
+	if err != nil {
+		_ = m.secureDelete(backupPath)
+		return "", fmt.Errorf("backup verification failed: cannot hash hosts file: %w", err)
+	}
+
+	backupHash, err := m.calculateFileHash(backupPath)
+	if err != nil {
 		_ = m.secureDelete(backupPath)
 		return "", fmt.Errorf("backup verification failed: %w", err)
+	}
+
+	if backupHash != sourceHash {
+		_ = m.secureDelete(backupPath)
+		return "", fmt.Errorf("backup verification failed: contents do not match %s",
+			m.platform.GetHostsFilePath())
 	}
 
 	return backupPath, nil

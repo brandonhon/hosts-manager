@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -767,35 +768,10 @@ func TestVerifyBackupIntegrity(t *testing.T) {
 		t.Fatalf("Failed to create test backup: %v", err)
 	}
 
-	// Verify integrity (should always pass for valid files with current implementation)
-	// Note: The current implementation recalculates hash each time, so it will always "pass"
-	// This tests that the function works without errors for valid files
+	// A readable, non-empty backup passes.
 	err = manager.VerifyBackupIntegrity(backupPath)
 	if err != nil {
 		t.Fatalf("Integrity verification should pass for valid file: %v", err)
-	}
-
-	// Test that we can detect hash differences manually
-	originalHash, err := manager.calculateFileHash(backupPath)
-	if err != nil {
-		t.Fatalf("Failed to calculate original hash: %v", err)
-	}
-
-	// Modify the file
-	corruptedContent := "different content"
-	err = os.WriteFile(backupPath, []byte(corruptedContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to modify backup file: %v", err)
-	}
-
-	// Calculate new hash - should be different
-	newHash, err := manager.calculateFileHash(backupPath)
-	if err != nil {
-		t.Fatalf("Failed to calculate new hash: %v", err)
-	}
-
-	if newHash == originalHash {
-		t.Error("Hash should be different after content change")
 	}
 
 	// Test with non-existent file
@@ -803,6 +779,57 @@ func TestVerifyBackupIntegrity(t *testing.T) {
 	err = manager.VerifyBackupIntegrity(nonExistentPath)
 	if err == nil {
 		t.Error("Integrity verification should fail for non-existent file")
+	}
+
+	// An empty backup is not a usable backup.
+	emptyPath := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-31-00")
+	if err := os.WriteFile(emptyPath, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.VerifyBackupIntegrity(emptyPath); err == nil {
+		t.Error("Integrity verification should fail for an empty backup")
+	}
+}
+
+// TestVerifyBackupIntegrityDetectsTruncatedArchive is the regression test for
+// the tautology: VerifyBackupIntegrity used to hash the file and then hash the
+// same file again through getBackupInfo and compare the two, so it returned nil
+// for anything that could be opened — including a corrupt archive.
+func TestVerifyBackupIntegrityDetectsTruncatedArchive(t *testing.T) {
+	tempDir := t.TempDir()
+	manager := NewManager(createTestConfig(tempDir))
+
+	// Build a real gzip backup, then cut it short.
+	good := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-30-00.gz")
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write([]byte("127.0.0.1 localhost\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(good, buf.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.VerifyBackupIntegrity(good); err != nil {
+		t.Fatalf("intact archive should verify: %v", err)
+	}
+
+	truncated := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-32-00.gz")
+	if err := os.WriteFile(truncated, buf.Bytes()[:buf.Len()-6], 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.VerifyBackupIntegrity(truncated); err == nil {
+		t.Error("truncated archive should fail verification")
+	}
+
+	garbage := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-33-00.gz")
+	if err := os.WriteFile(garbage, []byte("not gzip at all"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.VerifyBackupIntegrity(garbage); err == nil {
+		t.Error("non-gzip content under a .gz name should fail verification")
 	}
 }
 
