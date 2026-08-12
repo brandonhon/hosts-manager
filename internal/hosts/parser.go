@@ -301,6 +301,12 @@ func formatEntry(entry Entry) string {
 	return line
 }
 
+// AddEntry validates an entry and appends it to its category, creating the
+// category if it does not exist yet.
+//
+// HostsFile is not safe for concurrent use. Callers are single-threaded, and
+// concurrency between processes is handled by the file lock in atomic.go, so
+// the in-memory model carries no lock of its own.
 func (hf *HostsFile) AddEntry(entry Entry) error {
 	// Validate the entry before adding
 	if err := ValidateEntry(entry); err != nil {
