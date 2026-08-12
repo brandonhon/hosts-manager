@@ -134,11 +134,18 @@ func DefaultConfig() *Config {
 	}
 }
 
+// getDefaultEditor picks the editor to seed a new config with.
+//
+// $VISUAL takes precedence over $EDITOR, which is the POSIX convention: $EDITOR
+// may name a line editor suitable for a dumb terminal, while $VISUAL names the
+// full-screen one to use when the terminal can support it. This checked them
+// the other way round, so anyone who sets both got the fallback rather than
+// their preferred editor.
 func getDefaultEditor() string {
-	if editor := os.Getenv("EDITOR"); editor != "" {
+	if editor := os.Getenv("VISUAL"); editor != "" {
 		return editor
 	}
-	if editor := os.Getenv("VISUAL"); editor != "" {
+	if editor := os.Getenv("EDITOR"); editor != "" {
 		return editor
 	}
 	return "nano"
