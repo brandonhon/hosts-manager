@@ -66,12 +66,16 @@ func (m *Manager) CreateBackup() (string, error) {
 }
 
 func (m *Manager) copyFile(src, dst string, compress bool) error {
+	// src is the platform hosts path and dst the backup path this package
+	// composed from the configured backup directory. Neither is user input.
+	// #nosec G304 -- internally composed paths
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = srcFile.Close() }()
 
+	// #nosec G304 -- backup path composed from the configured backup directory
 	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
@@ -139,6 +143,9 @@ func (m *Manager) RestoreBackup(backupPath string) error {
 // File permissions are preserved by AtomicWrite, which chmods the temp file to
 // match the target before renaming.
 func (m *Manager) restoreFile(src, dst string, decompress bool) error {
+	// src reaches here from restoreCmd via validateFilePath, which requires
+	// it to resolve inside the configured backup directory.
+	// #nosec G304 -- path validated against the backup directory
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -223,6 +230,10 @@ func (m *Manager) getBackupInfo(filePath string) (BackupInfo, error) {
 }
 
 func (m *Manager) calculateFileHash(filePath string) (string, error) {
+	// Callers pass either a glob result from the backup directory or a path
+	// already validated against it. VerifyBackupIntegrity is exported, so a
+	// future caller must preserve that invariant.
+	// #nosec G304 -- backup-directory path, validated or enumerated
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", err
@@ -319,6 +330,10 @@ func (m *Manager) secureDelete(filePath string) error {
 	fileSize := fileInfo.Size()
 
 	// Open file for writing
+	// Reached from cleanupOldBackups with a glob result, or DeleteBackup with
+	// a caller-supplied backup path. Exported entry points must keep that
+	// invariant, since this overwrites the file before removing it.
+	// #nosec G304 -- backup-directory path, validated or enumerated
 	file, err := os.OpenFile(filePath, os.O_WRONLY, 0)
 	if err != nil {
 		return fmt.Errorf("failed to open file for secure deletion: %w", err)

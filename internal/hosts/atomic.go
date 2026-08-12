@@ -23,6 +23,9 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 	lockPath := targetPath + ".lock"
 
 	// Create lock file first with O_EXCL for atomic creation
+	// lockPath is targetPath with a ".lock" suffix; targetPath is the hosts
+	// file path from the platform, or a path already validated by the caller.
+	// #nosec G304 -- lock file adjacent to the write target
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		if os.IsExist(err) {
@@ -33,6 +36,7 @@ func NewAtomicFileWriter(targetPath string) (*AtomicFileWriter, error) {
 					// Attempt to clean up stale lock file
 					if rmErr := os.Remove(lockPath); rmErr == nil {
 						// Retry lock file creation
+						// #nosec G304 -- same lock path, retried after stale cleanup
 						lockFile, err = os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 						if err != nil {
 							return nil, fmt.Errorf("failed to create lock file after cleanup: %w", err)

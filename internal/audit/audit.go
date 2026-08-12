@@ -482,6 +482,9 @@ func (l *Logger) compressLog(logPath string) error {
 
 	// Create compressed file first
 	compressedPath := logPath + ".gz"
+	// compressedPath is l.logPath plus a rotation suffix and ".gz"; the
+	// logger builds its own path from the platform data dir.
+	// #nosec G304 -- derived from the logger's own path, never user input
 	compressedFile, err := os.Create(compressedPath)
 	if err != nil {
 		return fmt.Errorf("failed to create compressed log: %w", err)
@@ -495,6 +498,7 @@ func (l *Logger) compressLog(logPath string) error {
 	}
 
 	// Read and compress the original file
+	// #nosec G304 -- rotation slot derived from the logger's own path
 	originalFile, err := os.Open(logPath)
 	if err != nil {
 		_ = gzipWriter.Close()
