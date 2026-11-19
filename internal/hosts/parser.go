@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -490,4 +491,17 @@ func (hf *HostsFile) AddCategory(name, description string) error {
 
 	hf.Categories = append(hf.Categories, newCategory)
 	return nil
+}
+
+// SetEnabledCategories enables every entry in the named categories and
+// disables every other entry; this is what activating a profile means.
+func (hf *HostsFile) SetEnabledCategories(names []string) {
+	for i := range hf.Categories {
+		c := &hf.Categories[i]
+		on := slices.Contains(names, c.Name)
+		c.Enabled = on
+		for j := range c.Entries {
+			c.Entries[j].Enabled = on
+		}
+	}
 }

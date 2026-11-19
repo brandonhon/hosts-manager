@@ -1,1227 +1,899 @@
+// Package tui is the interactive hosts file editor: categories on the left,
+// the selected category's entries on the right. Edits stay in memory until
+// saved; saving goes through the same backup-write-audit path as the CLI.
 package tui
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
-type model struct {
-	hostsFile    *hosts.HostsFile
-	config       *config.Config
-	dryRun       bool                         // save reports instead of writing
-	save         func(*hosts.HostsFile) error // backs up, writes and audits
-	currentView  view
-	cursor       int
-	selected     map[int]bool
-	searchQuery  string
-	searchActive bool
-	message      string
-	entries      []entryWithIndex
-	categories   []string
-	width        int
-	height       int
-	// Add entry fields
-	addIP        string
-	addHostnames string
-	addComment   string
-	addCategory  string
-	addField     int // 0=IP, 1=hostnames, 2=comment, 3=category
-	// Move entry fields
-	moveEntryIndex     int    // Index of entry to move
-	moveCategoryCursor int    // Cursor for category selection
-	moveTargetCategory string // Target category name
-	// Create category fields
-	createCategoryName        string // Name of new category to create
-	createCategoryDescription string // Description of new category
-	createCategoryField       int    // 0=name, 1=description
-	// Edit entry fields
-	editEntryIndex int    // Index of entry being edited
-	editIP         string // IP being edited
-	editHostnames  string // Hostnames being edited
-	editComment    string // Comment being edited
-	editCategory   string // Category being edited
-	editField      int    // 0=IP, 1=hostnames, 2=comment, 3=category
-}
+// Below this width the category pane is hidden and ←/→ switch category.
+const narrowWidth = 80
 
-type view int
+const sidebarWidth = 26
+
+type focus int
 
 const (
-	viewMain view = iota
-	viewSearch
-	viewHelp
-	viewAdd
-	viewMove
-	viewCreateCategory
-	viewEdit
+	focusCategories focus = iota
+	focusEntries
 )
 
-type entryWithIndex struct {
-	entry    hosts.Entry
-	category string
-	index    int
-	catIndex int
-}
+type mode int
 
-var (
-	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Bold(true).
-			Margin(1, 0, 0, 2)
-
-	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Bold(true).
-			Margin(0, 0, 1, 2)
-
-	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("229")).
-			Background(lipgloss.Color("57")).
-			Bold(true)
-
-	enabledStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("76"))
-
-	disabledStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	categoryStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")).
-			Bold(true).
-			Margin(1, 0, 0, 0)
-
-	helpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Margin(1, 0, 0, 2)
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Bold(true)
-
-	successStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("76")).
-			Bold(true)
-
-	moveStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("208")).
-			Background(lipgloss.Color("53")).
-			Bold(true)
-
-	keyStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("76")).
-			Bold(true)
-
-	actionStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
+const (
+	modeBrowse mode = iota
+	modeFilter
+	modeForm
+	modePick
+	modeHelp
+	modeConfirmQuit
 )
 
-// controlsView returns a nicely formatted help section for key bindings
-func controlsView() string {
-	// Define key-action pairs with fixed widths for alignment
-	controls := []struct {
-		key    string
-		action string
-		width  int
-	}{
-		{"Space", "Toggle", 19},
-		{"a", "Add", 12},
-		{"e", "Edit", 13},
-		{"c", "Create Category", 0},
-		{"m", "Move", 19},
-		{"d", "Delete", 12},
-		{"s", "Save", 13},
-		{"/", "Search", 0},
-		{"?", "Help", 19},
-		{"q", "Quit", 0},
-	}
+// row identifies an entry by its position in the hosts file. Positions, not
+// IP/hostname, so that duplicate lines are still distinct rows.
+type row struct{ cat, idx int }
 
-	// Create formatted control strings with fixed widths for alignment
-	var row1Items []string
-	var row2Items []string
-	var row3Items []string
+type model struct {
+	hf     *hosts.HostsFile
+	cfg    *config.Config
+	dryRun bool
+	save   func(*hosts.HostsFile) error
 
-	// Distribute controls across 3 rows
-	for i, ctrl := range controls {
-		formatted := lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			keyStyle.Render("["+ctrl.key+"]"),
-			" ",
-			actionStyle.Render(ctrl.action),
-		)
+	width, height int
+	focus         focus
+	mode          mode
 
-		// Add padding to align columns
-		if ctrl.width > 0 {
-			currentWidth := lipgloss.Width(formatted)
-			if currentWidth < ctrl.width {
-				formatted = formatted + strings.Repeat(" ", ctrl.width-currentWidth)
-			}
-		}
+	cat    int // selected category index
+	cursor int // selected row in the entry pane
+	offset int // first visible row in the entry pane
 
-		// Distribute into rows
-		if i < 4 {
-			row1Items = append(row1Items, formatted)
-		} else if i < 8 {
-			row2Items = append(row2Items, formatted)
-		} else {
-			row3Items = append(row3Items, formatted)
-		}
-	}
+	filter textinput.Model
 
-	// Add indentation for alignment
-	indent := "  "
+	form formState
+	pick pickState
 
-	// Join items in each row
-	row1 := indent + lipgloss.JoinHorizontal(lipgloss.Left, row1Items...)
-	row2 := indent + lipgloss.JoinHorizontal(lipgloss.Left, row2Items...)
-	row3 := indent + lipgloss.JoinHorizontal(lipgloss.Left, row3Items...)
-
-	// Create header
-	header := "Controls:"
-
-	// Join rows vertically with header
-	return lipgloss.JoinVertical(lipgloss.Left, header, row1, row2, row3)
+	unsaved int
+	message string
+	isError bool
 }
 
-func Run(hostsFile *hosts.HostsFile, cfg *config.Config, dryRun bool, save func(*hosts.HostsFile) error) error {
-	m := model{
-		hostsFile:   hostsFile,
-		config:      cfg,
-		dryRun:      dryRun,
-		save:        save,
-		currentView: viewMain,
-		selected:    make(map[int]bool),
-		entries:     buildEntryList(hostsFile),
-	}
+type formState struct {
+	inputs  [4]textinput.Model // ip, hostnames, comment, category
+	field   int
+	editing *row // nil when adding
+	err     string
+}
 
-	m.categories = make([]string, len(hostsFile.Categories))
-	for i, cat := range hostsFile.Categories {
-		m.categories[i] = cat.Name
-	}
+type pickState struct {
+	title   string
+	options []string
+	cursor  int
+	apply   func(choice string)
+}
 
-	p := tea.NewProgram(&m, tea.WithAltScreen())
-	_, err := p.Run()
+type savedMsg struct{ err error }
+
+// Run starts the editor. save writes the file; it is not called in a dry run.
+func Run(hf *hosts.HostsFile, cfg *config.Config, dryRun bool, save func(*hosts.HostsFile) error) error {
+	_, err := tea.NewProgram(newModel(hf, cfg, dryRun, save), tea.WithAltScreen()).Run()
 	return err
 }
 
-func buildEntryList(hostsFile *hosts.HostsFile) []entryWithIndex {
-	var entries []entryWithIndex
-	index := 0
+func newModel(hf *hosts.HostsFile, cfg *config.Config, dryRun bool, save func(*hosts.HostsFile) error) *model {
+	filter := textinput.New()
+	filter.Prompt = "/"
+	filter.Placeholder = "filter by IP, hostname or comment"
+	return &model{hf: hf, cfg: cfg, dryRun: dryRun, save: save, filter: filter, focus: focusEntries, width: 100, height: 30}
+}
 
-	for catIndex, category := range hostsFile.Categories {
-		for _, entry := range category.Entries {
-			entries = append(entries, entryWithIndex{
-				entry:    entry,
-				category: category.Name,
-				index:    index,
-				catIndex: catIndex,
-			})
-			index++
+func (m *model) Init() tea.Cmd { return nil }
+
+// ---------------------------------------------------------------- data access
+
+// rows lists the entry pane: matches across every category while filtering,
+// otherwise the selected category's entries.
+func (m *model) rows() []row {
+	var out []row
+	q := strings.ToLower(strings.TrimSpace(m.filter.Value()))
+	for ci, c := range m.hf.Categories {
+		if q == "" && ci != m.cat {
+			continue
+		}
+		for ei, e := range c.Entries {
+			if q == "" || matches(e, q) {
+				out = append(out, row{ci, ei})
+			}
 		}
 	}
-
-	return entries
+	return out
 }
 
-func (m *model) Init() tea.Cmd {
-	return nil
+func matches(e hosts.Entry, q string) bool {
+	for _, f := range append([]string{e.IP, e.Comment}, e.Hostnames...) {
+		if strings.Contains(strings.ToLower(f), q) {
+			return true
+		}
+	}
+	return false
 }
+
+func (m *model) entry(r row) *hosts.Entry { return &m.hf.Categories[r.cat].Entries[r.idx] }
+
+func (m *model) selected() (row, bool) {
+	rs := m.rows()
+	if m.cursor < 0 || m.cursor >= len(rs) {
+		return row{}, false
+	}
+	return rs[m.cursor], true
+}
+
+func (m *model) categoryNames() []string {
+	names := make([]string, len(m.hf.Categories))
+	for i, c := range m.hf.Categories {
+		names[i] = c.Name
+	}
+	return names
+}
+
+func enabledCount(c hosts.Category) int {
+	n := 0
+	for _, e := range c.Entries {
+		if e.Enabled {
+			n++
+		}
+	}
+	return n
+}
+
+// activeProfile names the profile whose categories are exactly the ones with
+// enabled entries, or "custom" when none matches.
+func (m *model) activeProfile() string {
+	var on []string
+	for _, c := range m.hf.Categories {
+		if enabledCount(c) > 0 {
+			on = append(on, c.Name)
+		}
+	}
+	sort.Strings(on)
+	for _, name := range m.profileNames() {
+		want := slices.Clone(m.cfg.Profiles[name].Categories)
+		// A profile may name categories this file does not have.
+		want = slices.DeleteFunc(want, func(c string) bool { return m.hf.GetCategory(c) == nil })
+		sort.Strings(want)
+		if slices.Equal(on, want) {
+			return name
+		}
+	}
+	return "custom"
+}
+
+func (m *model) profileNames() []string {
+	var names []string
+	if m.cfg != nil {
+		for name := range m.cfg.Profiles {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (m *model) changed(msg string) {
+	m.unsaved++
+	m.say(msg)
+}
+
+func (m *model) say(msg string)  { m.message, m.isError = msg, false }
+func (m *model) fail(msg string) { m.message, m.isError = msg, true }
+
+// ------------------------------------------------------------------- updates
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.width, m.height = msg.Width, msg.Height
+		m.clamp()
 		return m, nil
-
+	case savedMsg:
+		if msg.err != nil {
+			m.fail("Save failed: " + msg.err.Error())
+		} else {
+			m.unsaved = 0
+			m.say("Saved")
+		}
+		return m, nil
 	case tea.KeyMsg:
-		switch m.currentView {
-		case viewMain:
-			return m.updateMain(msg)
-		case viewSearch:
-			return m.updateSearch(msg)
-		case viewHelp:
-			return m.updateHelp(msg)
-		case viewAdd:
-			return m.updateAdd(msg)
-		case viewMove:
-			return m.updateMove(msg)
-		case viewCreateCategory:
-			return m.updateCreateCategory(msg)
-		case viewEdit:
-			return m.updateEdit(msg)
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
 		}
-
-	case errorMsg:
-		m.message = fmt.Sprintf("Error: %v", msg.err)
-		return m, nil
-
-	case successMsg:
-		m.message = "File saved successfully!"
-		return m, nil
-
-	case dryRunMsg:
-		m.message = "Dry run: changes not saved"
-		return m, nil
+		switch m.mode {
+		case modeFilter:
+			return m.updateFilter(msg)
+		case modeForm:
+			return m.updateForm(msg)
+		case modePick:
+			return m.updatePick(msg)
+		case modeHelp:
+			m.mode = modeBrowse
+			return m, nil
+		case modeConfirmQuit:
+			return m.updateConfirmQuit(msg)
+		}
+		return m.updateBrowse(msg)
 	}
-
 	return m, nil
 }
 
-func (m *model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "q", "ctrl+c":
+func (m *model) updateBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	narrow := m.width < narrowWidth
+	key := msg.String()
+	m.message = "" // a status message lasts until the next key
+
+	// Keys that mean the same in either pane.
+	switch key {
+	case "q":
+		if m.unsaved > 0 {
+			m.mode = modeConfirmQuit
+			return m, nil
+		}
 		return m, tea.Quit
-
-	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-
-	case "down", "j":
-		if m.cursor < len(m.entries)-1 {
-			m.cursor++
-		}
-
-	case "g":
-		m.cursor = 0
-
-	case "G":
-		m.cursor = len(m.entries) - 1
-
-	case " ":
-		if m.cursor < len(m.entries) {
-			entry := &m.entries[m.cursor]
-			entry.entry.Enabled = !entry.entry.Enabled
-
-			// Update the corresponding entry in the hosts file
-			hostsCategory := m.hostsFile.GetCategory(entry.category)
-			if hostsCategory != nil {
-				for i := range hostsCategory.Entries {
-					// Match by IP and first hostname for more reliable identification
-					if hostsCategory.Entries[i].IP == entry.entry.IP &&
-						len(hostsCategory.Entries[i].Hostnames) > 0 &&
-						len(entry.entry.Hostnames) > 0 &&
-						hostsCategory.Entries[i].Hostnames[0] == entry.entry.Hostnames[0] {
-						hostsCategory.Entries[i].Enabled = entry.entry.Enabled
-						break
-					}
-				}
-			}
-
-			status := "disabled"
-			if entry.entry.Enabled {
-				status = "enabled"
-			}
-			m.message = fmt.Sprintf("Entry %s", status)
-		}
-
-	case "d":
-		if m.cursor < len(m.entries) {
-			entry := m.entries[m.cursor]
-			hostname := entry.entry.Hostnames[0]
-
-			if m.hostsFile.RemoveEntry(hostname) {
-				m.entries = buildEntryList(m.hostsFile)
-				if m.cursor >= len(m.entries) && len(m.entries) > 0 {
-					m.cursor = len(m.entries) - 1
-				}
-				m.message = fmt.Sprintf("Deleted entry: %s", hostname)
-			} else {
-				m.message = fmt.Sprintf("Failed to delete entry: %s", hostname)
-			}
-		}
-
-	case "/":
-		m.currentView = viewSearch
-		m.searchActive = true
-		m.searchQuery = ""
-
-	case "r":
-		m.entries = buildEntryList(m.hostsFile)
-		m.message = "Refreshed"
-
 	case "s":
-		return m, m.saveFile()
-
+		return m, m.saveCmd()
+	case "?":
+		m.mode = modeHelp
+		return m, nil
+	case "/":
+		m.mode = modeFilter
+		m.focus = focusEntries
+		return m, m.filter.Focus()
+	case "esc":
+		m.filter.SetValue("")
+		m.cursor, m.offset = 0, 0
+		return m, nil
 	case "a":
-		m.currentView = viewAdd
-		m.addIP = ""
-		m.addHostnames = ""
-		m.addComment = ""
-		m.addCategory = m.config.General.DefaultCategory
-		m.addField = 0
+		m.openForm(nil)
+		return m, textinput.Blink
+	case "p":
+		m.openProfilePicker()
+		return m, nil
+	case "t":
+		m.toggleCategory(m.cat)
+		return m, nil
+	case "tab":
+		if !narrow {
+			m.focus = 1 - m.focus
+		}
+		return m, nil
+	}
 
-	case "c":
-		m.currentView = viewCreateCategory
-		m.createCategoryName = ""
-		m.createCategoryDescription = ""
-		m.createCategoryField = 0
+	if m.focus == focusCategories && !narrow {
+		switch key {
+		case "up", "k":
+			m.selectCategory(m.cat - 1)
+		case "down", "j":
+			m.selectCategory(m.cat + 1)
+		case "right", "l", "enter":
+			m.focus = focusEntries
+		case " ":
+			m.toggleCategory(m.cat)
+		}
+		return m, nil
+	}
 
-	case "e":
-		if m.cursor < len(m.entries) {
-			m.currentView = viewEdit
-			m.editEntryIndex = m.cursor
-			entry := m.entries[m.cursor].entry
-			m.editIP = entry.IP
-			m.editHostnames = strings.Join(entry.Hostnames, " ")
-			m.editComment = entry.Comment
-			m.editCategory = entry.Category
-			m.editField = 0
+	switch key {
+	case "left", "h":
+		if narrow {
+			m.selectCategory(m.cat - 1)
 		} else {
-			m.message = "No entry selected to edit"
+			m.focus = focusCategories
 		}
-
-	case "m":
-		if m.cursor < len(m.entries) {
-			m.currentView = viewMove
-			m.moveEntryIndex = m.cursor
-			m.moveCategoryCursor = 0
-			// Set initial target category to first available category different from current
-			currentCategory := m.entries[m.cursor].category
-			m.moveTargetCategory = ""
-			for _, cat := range m.categories {
-				if cat != currentCategory {
-					m.moveTargetCategory = cat
-					break
-				}
-			}
-		} else {
-			m.message = "No entry selected to move"
+	case "right", "l":
+		if narrow {
+			m.selectCategory(m.cat + 1)
 		}
-
-	case "?", "h":
-		m.currentView = viewHelp
-
-	case "enter":
-		if m.cursor < len(m.entries) {
-			entry := m.entries[m.cursor]
-			m.message = fmt.Sprintf("Selected: %s -> %v", entry.entry.IP, entry.entry.Hostnames)
-		}
-	}
-
-	return m, nil
-}
-
-func (m *model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.currentView = viewMain
-		m.searchActive = false
-		m.searchQuery = ""
-		m.entries = buildEntryList(m.hostsFile)
-
-	case "enter":
-		m.currentView = viewMain
-		m.searchActive = false
-		m.filterEntries()
-
-	case "backspace":
-		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
-		}
-
-	default:
-		if len(msg.String()) == 1 {
-			m.searchQuery += msg.String()
-		}
-	}
-
-	return m, nil
-}
-
-func (m *model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "q", "esc", "?", "h":
-		m.currentView = viewMain
-	}
-
-	return m, nil
-}
-
-func (m *model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.currentView = viewMain
-
-	case "tab", "down":
-		m.addField = (m.addField + 1) % 4
-
-	case "shift+tab", "up":
-		m.addField = (m.addField + 3) % 4
-
-	case "enter":
-		if m.addIP != "" && m.addHostnames != "" {
-			// Create new entry
-			hostnames := strings.Fields(m.addHostnames)
-			entry := hosts.Entry{
-				IP:        m.addIP,
-				Hostnames: hostnames,
-				Comment:   m.addComment,
-				Category:  m.addCategory,
-				Enabled:   true,
-			}
-
-			// Add to hosts file
-			if err := m.hostsFile.AddEntry(entry); err != nil {
-				m.message = fmt.Sprintf("Error adding entry: %v", err)
-				return m, nil
-			}
-			m.entries = buildEntryList(m.hostsFile)
-			m.message = fmt.Sprintf("Added entry: %s -> %v", entry.IP, entry.Hostnames)
-			m.currentView = viewMain
-		} else {
-			m.message = "IP and hostnames are required"
-		}
-
-	case "backspace":
-		switch m.addField {
-		case 0:
-			if len(m.addIP) > 0 {
-				m.addIP = m.addIP[:len(m.addIP)-1]
-			}
-		case 1:
-			if len(m.addHostnames) > 0 {
-				m.addHostnames = m.addHostnames[:len(m.addHostnames)-1]
-			}
-		case 2:
-			if len(m.addComment) > 0 {
-				m.addComment = m.addComment[:len(m.addComment)-1]
-			}
-		case 3:
-			if len(m.addCategory) > 0 {
-				m.addCategory = m.addCategory[:len(m.addCategory)-1]
-			}
-		}
-
-	default:
-		if len(msg.String()) == 1 {
-			switch m.addField {
-			case 0:
-				m.addIP += msg.String()
-			case 1:
-				m.addHostnames += msg.String()
-			case 2:
-				m.addComment += msg.String()
-			case 3:
-				m.addCategory += msg.String()
-			}
-		}
-	}
-
-	return m, nil
-}
-
-func (m *model) updateMove(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.currentView = viewMain
-
 	case "up", "k":
-		if m.moveCategoryCursor > 0 {
-			m.moveCategoryCursor--
-			m.moveTargetCategory = m.getAvailableCategories()[m.moveCategoryCursor]
-		}
-
+		m.cursor--
 	case "down", "j":
-		availableCategories := m.getAvailableCategories()
-		if m.moveCategoryCursor < len(availableCategories)-1 {
-			m.moveCategoryCursor++
-			m.moveTargetCategory = availableCategories[m.moveCategoryCursor]
-		}
-
-	case "enter":
-		if m.moveTargetCategory != "" && m.moveEntryIndex < len(m.entries) {
-			if err := m.moveEntry(m.moveEntryIndex, m.moveTargetCategory); err != nil {
-				m.message = fmt.Sprintf("Error moving entry: %v", err)
-			} else {
-				entryToMove := m.entries[m.moveEntryIndex]
-				m.message = fmt.Sprintf("Moved %s from %s to %s",
-					entryToMove.entry.Hostnames[0],
-					entryToMove.category,
-					m.moveTargetCategory)
-				m.entries = buildEntryList(m.hostsFile)
-				// Try to keep cursor on the same entry after move
-				m.cursor = m.findEntryAfterMove(entryToMove, m.moveTargetCategory)
+		m.cursor++
+	case "pgup":
+		m.cursor -= m.listHeight()
+	case "pgdown":
+		m.cursor += m.listHeight()
+	case "g", "home":
+		m.cursor = 0
+	case "G", "end":
+		m.cursor = len(m.rows()) - 1
+	case " ":
+		if r, ok := m.selected(); ok {
+			e := m.entry(r)
+			e.Enabled = !e.Enabled
+			state := "Disabled"
+			if e.Enabled {
+				state = "Enabled"
 			}
-			m.currentView = viewMain
+			m.changed(fmt.Sprintf("%s %s", state, strings.Join(e.Hostnames, " ")))
+		}
+	case "d":
+		if r, ok := m.selected(); ok {
+			c := &m.hf.Categories[r.cat]
+			name := strings.Join(c.Entries[r.idx].Hostnames, " ")
+			c.Entries = slices.Delete(c.Entries, r.idx, r.idx+1)
+			m.changed("Deleted " + name)
+		}
+	case "e", "enter":
+		if r, ok := m.selected(); ok {
+			m.openForm(&r)
+			return m, textinput.Blink
+		}
+	case "m":
+		if r, ok := m.selected(); ok {
+			m.openMovePicker(r)
 		}
 	}
-
+	m.clamp()
 	return m, nil
 }
 
-func (m *model) updateCreateCategory(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.currentView = viewMain
-
-	case "tab", "down":
-		m.createCategoryField = (m.createCategoryField + 1) % 2
-
-	case "shift+tab", "up":
-		m.createCategoryField = (m.createCategoryField + 1) % 2
-
-	case "enter":
-		if m.createCategoryName != "" {
-			// Validate category name
-			if err := m.validateCategoryName(m.createCategoryName); err != nil {
-				m.message = fmt.Sprintf("Invalid category name: %v", err)
-				return m, nil
-			}
-
-			// Check if category already exists
-			for _, existingCategory := range m.categories {
-				if existingCategory == m.createCategoryName {
-					m.message = fmt.Sprintf("Category '%s' already exists", m.createCategoryName)
-					return m, nil
-				}
-			}
-
-			// Create new category
-			if err := m.createCategory(m.createCategoryName, m.createCategoryDescription); err != nil {
-				m.message = fmt.Sprintf("Error creating category: %v", err)
-				return m, nil
-			}
-
-			// Update categories list and entries
-			m.categories = append(m.categories, m.createCategoryName)
-			m.entries = buildEntryList(m.hostsFile)
-			m.message = fmt.Sprintf("Created category: %s", m.createCategoryName)
-			m.currentView = viewMain
-		} else {
-			m.message = "Category name is required"
-		}
-
-	case "backspace":
-		switch m.createCategoryField {
-		case 0:
-			if len(m.createCategoryName) > 0 {
-				m.createCategoryName = m.createCategoryName[:len(m.createCategoryName)-1]
-			}
-		case 1:
-			if len(m.createCategoryDescription) > 0 {
-				m.createCategoryDescription = m.createCategoryDescription[:len(m.createCategoryDescription)-1]
-			}
-		}
-
-	default:
-		if len(msg.String()) == 1 {
-			switch m.createCategoryField {
-			case 0:
-				m.createCategoryName += msg.String()
-			case 1:
-				m.createCategoryDescription += msg.String()
-			}
-		}
+func (m *model) selectCategory(i int) {
+	if n := len(m.hf.Categories); n > 0 {
+		m.cat = (i + n) % n
 	}
-
-	return m, nil
+	m.cursor, m.offset = 0, 0
 }
 
-func (m *model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// toggleCategory disables every entry in the category if any is enabled,
+// otherwise enables them all.
+func (m *model) toggleCategory(i int) {
+	if i < 0 || i >= len(m.hf.Categories) {
+		return
+	}
+	c := m.hf.Categories[i]
+	if enabledCount(c) > 0 {
+		m.hf.DisableCategory(c.Name)
+		m.changed("Disabled category " + c.Name)
+	} else {
+		m.hf.EnableCategory(c.Name)
+		m.changed("Enabled category " + c.Name)
+	}
+}
+
+func (m *model) saveCmd() tea.Cmd {
+	if m.dryRun {
+		m.say("Dry run: changes not saved")
+		return nil
+	}
+	hf, save := m.hf, m.save
+	return func() tea.Msg { return savedMsg{save(hf)} }
+}
+
+// clamp keeps the cursor on a row and the row on screen.
+func (m *model) clamp() {
+	n := len(m.rows())
+	m.cursor = max(0, min(m.cursor, n-1))
+	h := m.listHeight()
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.cursor >= m.offset+h {
+		m.offset = m.cursor - h + 1
+	}
+	m.offset = max(0, min(m.offset, max(0, n-h)))
+}
+
+func (m *model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc":
-		m.currentView = viewMain
-
-	case "tab", "down":
-		m.editField = (m.editField + 1) % 4
-
-	case "shift+tab", "up":
-		m.editField = (m.editField + 3) % 4
-
 	case "enter":
-		// Validate and update the entry
-		if m.editIP == "" || m.editHostnames == "" {
-			m.message = "IP and hostnames are required"
+		m.mode = modeBrowse
+		m.filter.Blur()
+		return m, nil
+	case "esc":
+		m.mode = modeBrowse
+		m.filter.Blur()
+		m.filter.SetValue("")
+		m.cursor, m.offset = 0, 0
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Update(msg)
+	m.cursor, m.offset = 0, 0
+	return m, cmd
+}
+
+func (m *model) updateConfirmQuit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "s":
+		if m.dryRun {
+			return m, tea.Quit
+		}
+		if err := m.save(m.hf); err != nil {
+			m.mode = modeBrowse
+			m.fail("Save failed: " + err.Error())
 			return m, nil
 		}
-
-		// Split hostnames by space
-		hostnames := strings.Fields(m.editHostnames)
-		if len(hostnames) == 0 {
-			m.message = "At least one hostname is required"
-			return m, nil
-		}
-
-		// Find the entry in the hosts file and update it
-		entryWithIndex := m.entries[m.editEntryIndex]
-		category := m.hostsFile.GetCategory(entryWithIndex.category)
-		if category != nil {
-			for i := range category.Entries {
-				// Match by IP and first hostname for reliable identification
-				if category.Entries[i].IP == entryWithIndex.entry.IP &&
-					len(category.Entries[i].Hostnames) > 0 &&
-					len(entryWithIndex.entry.Hostnames) > 0 &&
-					category.Entries[i].Hostnames[0] == entryWithIndex.entry.Hostnames[0] {
-
-					// Update the entry
-					category.Entries[i].IP = m.editIP
-					category.Entries[i].Hostnames = hostnames
-					category.Entries[i].Comment = m.editComment
-
-					// If category changed, move the entry to the new category
-					if m.editCategory != entryWithIndex.category {
-						// Remove from current category
-						category.Entries = append(category.Entries[:i], category.Entries[i+1:]...)
-
-						// Add to new category
-						newEntry := hosts.Entry{
-							IP:        m.editIP,
-							Hostnames: hostnames,
-							Comment:   m.editComment,
-							Category:  m.editCategory,
-							Enabled:   entryWithIndex.entry.Enabled,
-						}
-
-						if err := m.hostsFile.AddEntry(newEntry); err != nil {
-							m.message = fmt.Sprintf("Error moving entry to new category: %v", err)
-							return m, nil
-						}
-					}
-					break
-				}
-			}
-		}
-
-		// Refresh entries and go back to main view
-		m.entries = buildEntryList(m.hostsFile)
-		m.message = "Entry updated successfully"
-		m.currentView = viewMain
-
-	case "backspace":
-		switch m.editField {
-		case 0: // IP
-			if len(m.editIP) > 0 {
-				m.editIP = m.editIP[:len(m.editIP)-1]
-			}
-		case 1: // Hostnames
-			if len(m.editHostnames) > 0 {
-				m.editHostnames = m.editHostnames[:len(m.editHostnames)-1]
-			}
-		case 2: // Comment
-			if len(m.editComment) > 0 {
-				m.editComment = m.editComment[:len(m.editComment)-1]
-			}
-		case 3: // Category
-			if len(m.editCategory) > 0 {
-				m.editCategory = m.editCategory[:len(m.editCategory)-1]
-			}
-		}
-
-	default:
-		if len(msg.String()) == 1 {
-			switch m.editField {
-			case 0: // IP
-				m.editIP += msg.String()
-			case 1: // Hostnames
-				m.editHostnames += msg.String()
-			case 2: // Comment
-				m.editComment += msg.String()
-			case 3: // Category
-				m.editCategory += msg.String()
-			}
-		}
+		return m, tea.Quit
+	case "q":
+		return m, tea.Quit
+	case "esc":
+		m.mode = modeBrowse
 	}
-
 	return m, nil
 }
 
-// validateCategoryName validates a category name using the same rules as the config validator
-func (m *model) validateCategoryName(name string) error {
-	if name == "" {
-		return fmt.Errorf("category name cannot be empty")
-	}
+// --------------------------------------------------------------------- forms
 
-	if len(name) > 50 {
-		return fmt.Errorf("category name too long (max 50 characters)")
-	}
+var formLabels = [4]string{"IP", "Hostnames", "Comment", "Category"}
 
-	// Use same validation as config validator
-	for _, r := range name {
-		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' {
-			return fmt.Errorf("category name contains invalid characters (only a-z, A-Z, 0-9, _, - allowed)")
-		}
+func (m *model) openForm(editing *row) {
+	var f formState
+	for i := range f.inputs {
+		f.inputs[i] = textinput.New()
+		f.inputs[i].Prompt = ""
+		f.inputs[i].CharLimit = 500
 	}
+	f.inputs[1].Placeholder = "one or more, separated by spaces"
+	f.inputs[2].Placeholder = "optional"
 
-	return nil
+	switch {
+	case editing != nil:
+		e := m.entry(*editing)
+		f.editing = editing
+		f.inputs[0].SetValue(e.IP)
+		f.inputs[1].SetValue(strings.Join(e.Hostnames, " "))
+		f.inputs[2].SetValue(e.Comment)
+		f.inputs[3].SetValue(m.hf.Categories[editing.cat].Name)
+	case len(m.hf.Categories) > 0:
+		f.inputs[3].SetValue(m.hf.Categories[m.cat].Name)
+	case m.cfg != nil:
+		f.inputs[3].SetValue(m.cfg.General.DefaultCategory)
+	}
+	f.inputs[0].Focus()
+	m.form = f
+	m.mode = modeForm
 }
 
-// createCategory adds a new category to the hosts file
-func (m *model) createCategory(name, description string) error {
-	// Create new category
-	newCategory := hosts.Category{
-		Name:        name,
-		Description: description,
-		Enabled:     true,
-		Entries:     []hosts.Entry{},
+// formEntry builds the entry the form describes. For an edit it starts from
+// the original so that fields the form does not show (notes, enabled) survive.
+func (m *model) formEntry() hosts.Entry {
+	var e hosts.Entry
+	if m.form.editing != nil {
+		e = *m.entry(*m.form.editing)
+	} else {
+		e.Enabled = true
 	}
-
-	// Add to hosts file
-	m.hostsFile.Categories = append(m.hostsFile.Categories, newCategory)
-
-	return nil
+	e.IP = strings.TrimSpace(m.form.inputs[0].Value())
+	e.Hostnames = strings.Fields(m.form.inputs[1].Value())
+	e.Comment = strings.TrimSpace(m.form.inputs[2].Value())
+	e.Category = strings.TrimSpace(m.form.inputs[3].Value())
+	return e
 }
 
-// getAvailableCategories returns categories excluding the current entry's category
-func (m *model) getAvailableCategories() []string {
-	if m.moveEntryIndex >= len(m.entries) {
-		return m.categories
+func (m *model) validateForm() {
+	e := m.formEntry()
+	if e.IP == "" || len(e.Hostnames) == 0 {
+		m.form.err = ""
+		return
 	}
-
-	currentCategory := m.entries[m.moveEntryIndex].category
-	var available []string
-	for _, cat := range m.categories {
-		if cat != currentCategory {
-			available = append(available, cat)
-		}
+	if err := hosts.ValidateEntry(e); err != nil {
+		m.form.err = err.Error()
+	} else {
+		m.form.err = ""
 	}
-	return available
 }
 
-// findEntryAfterMove tries to find the entry's new position after moving
-func (m *model) findEntryAfterMove(movedEntry entryWithIndex, targetCategory string) int {
-	for i, entry := range m.entries {
-		if entry.category == targetCategory &&
-			entry.entry.IP == movedEntry.entry.IP &&
-			len(entry.entry.Hostnames) > 0 &&
-			len(movedEntry.entry.Hostnames) > 0 &&
-			entry.entry.Hostnames[0] == movedEntry.entry.Hostnames[0] {
-			return i
-		}
+func (m *model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	f := &m.form
+	switch msg.String() {
+	case "esc":
+		m.mode = modeBrowse
+		return m, nil
+	case "tab", "down":
+		return m, m.focusField(f.field + 1)
+	case "shift+tab", "up":
+		return m, m.focusField(f.field + 3)
+	case "enter":
+		m.submitForm()
+		return m, nil
 	}
-	return 0 // Default to first entry if not found
+	var cmd tea.Cmd
+	f.inputs[f.field], cmd = f.inputs[f.field].Update(msg)
+	m.validateForm()
+	return m, cmd
 }
 
-// moveEntry moves an entry from its current category to the target category
-func (m *model) moveEntry(entryIndex int, targetCategory string) error {
-	if entryIndex >= len(m.entries) {
-		return fmt.Errorf("invalid entry index")
-	}
-
-	entryToMove := m.entries[entryIndex]
-	sourceCategory := entryToMove.category
-
-	// Find the source category in hostsFile
-	var sourceCat *hosts.Category
-	for i := range m.hostsFile.Categories {
-		if m.hostsFile.Categories[i].Name == sourceCategory {
-			sourceCat = &m.hostsFile.Categories[i]
-			break
-		}
-	}
-	if sourceCat == nil {
-		return fmt.Errorf("source category not found: %s", sourceCategory)
-	}
-
-	// Find the target category in hostsFile
-	var targetCat *hosts.Category
-	for i := range m.hostsFile.Categories {
-		if m.hostsFile.Categories[i].Name == targetCategory {
-			targetCat = &m.hostsFile.Categories[i]
-			break
-		}
-	}
-	if targetCat == nil {
-		return fmt.Errorf("target category not found: %s", targetCategory)
-	}
-
-	// Find and remove the entry from source category
-	var entryToMoveData hosts.Entry
-	entryFound := false
-	for i, entry := range sourceCat.Entries {
-		if entry.IP == entryToMove.entry.IP &&
-			len(entry.Hostnames) > 0 &&
-			len(entryToMove.entry.Hostnames) > 0 &&
-			entry.Hostnames[0] == entryToMove.entry.Hostnames[0] {
-			entryToMoveData = entry
-			entryToMoveData.Category = targetCategory
-			// Remove from source category
-			sourceCat.Entries = append(sourceCat.Entries[:i], sourceCat.Entries[i+1:]...)
-			entryFound = true
-			break
-		}
-	}
-
-	if !entryFound {
-		return fmt.Errorf("entry not found in source category")
-	}
-
-	// Add to target category
-	targetCat.Entries = append(targetCat.Entries, entryToMoveData)
-
-	return nil
+func (m *model) focusField(i int) tea.Cmd {
+	m.form.inputs[m.form.field].Blur()
+	m.form.field = i % len(m.form.inputs)
+	return m.form.inputs[m.form.field].Focus()
 }
 
-func (m *model) filterEntries() {
-	if m.searchQuery == "" {
-		m.entries = buildEntryList(m.hostsFile)
+func (m *model) submitForm() {
+	e := m.formEntry()
+	if e.IP == "" || len(e.Hostnames) == 0 {
+		m.form.err = "IP and at least one hostname are required"
+		return
+	}
+	if err := hosts.ValidateEntry(e); err != nil {
+		m.form.err = err.Error()
 		return
 	}
 
-	var filtered []entryWithIndex
-	query := strings.ToLower(m.searchQuery)
+	if r := m.form.editing; r != nil && m.hf.Categories[r.cat].Name == e.Category {
+		*m.entry(*r) = e
+		m.changed("Updated " + strings.Join(e.Hostnames, " "))
+	} else {
+		if r != nil {
+			c := &m.hf.Categories[r.cat]
+			c.Entries = slices.Delete(c.Entries, r.idx, r.idx+1)
+		}
+		if err := m.hf.AddEntry(e); err != nil {
+			m.form.err = err.Error()
+			return
+		}
+		verb := "Added"
+		if r != nil {
+			verb = "Moved"
+		}
+		m.changed(fmt.Sprintf("%s %s in %s", verb, strings.Join(e.Hostnames, " "), e.Category))
+		m.showEntry(e.Category, -1)
+	}
+	m.mode = modeBrowse
+	m.clamp()
+}
 
-	for _, entry := range m.entries {
-		match := false
-
-		for _, hostname := range entry.entry.Hostnames {
-			if strings.Contains(strings.ToLower(hostname), query) {
-				match = true
-				break
+// showEntry selects category name and, with idx < 0, its last entry.
+func (m *model) showEntry(name string, idx int) {
+	m.filter.SetValue("")
+	for i, c := range m.hf.Categories {
+		if c.Name == name {
+			m.cat = i
+			if idx < 0 {
+				idx = len(c.Entries) - 1
 			}
+			m.cursor = idx
+			m.focus = focusEntries
+			return
 		}
-
-		if !match && strings.Contains(strings.ToLower(entry.entry.IP), query) {
-			match = true
-		}
-
-		if !match && strings.Contains(strings.ToLower(entry.entry.Comment), query) {
-			match = true
-		}
-
-		if !match && strings.Contains(strings.ToLower(entry.category), query) {
-			match = true
-		}
-
-		if match {
-			filtered = append(filtered, entry)
-		}
-	}
-
-	m.entries = filtered
-	m.cursor = 0
-	m.message = fmt.Sprintf("Found %d entries matching '%s'", len(filtered), m.searchQuery)
-}
-
-func (m *model) saveFile() tea.Cmd {
-	return func() tea.Msg {
-		// A dry run skips the privilege check, so it must not write either.
-		if m.dryRun {
-			return dryRunMsg{}
-		}
-		if err := m.save(m.hostsFile); err != nil {
-			return errorMsg{err}
-		}
-		return successMsg{}
 	}
 }
 
-type errorMsg struct{ err error }
-type successMsg struct{}
-type dryRunMsg struct{}
+// ------------------------------------------------------------------- pickers
+
+func (m *model) openMovePicker(r row) {
+	from := m.hf.Categories[r.cat].Name
+	var options []string
+	for _, name := range m.categoryNames() {
+		if name != from {
+			options = append(options, name)
+		}
+	}
+	if len(options) == 0 {
+		m.fail("No other category to move to; edit the entry to type a new one")
+		return
+	}
+	m.pick = pickState{title: "Move to category", options: options, apply: func(to string) {
+		e := *m.entry(r)
+		e.Category = to
+		c := &m.hf.Categories[r.cat]
+		c.Entries = slices.Delete(c.Entries, r.idx, r.idx+1)
+		target := m.hf.GetCategory(to)
+		target.Entries = append(target.Entries, e)
+		m.changed(fmt.Sprintf("Moved %s to %s", strings.Join(e.Hostnames, " "), to))
+		m.showEntry(to, -1)
+	}}
+	m.mode = modePick
+}
+
+func (m *model) openProfilePicker() {
+	names := m.profileNames()
+	if len(names) == 0 {
+		m.fail("No profiles defined in the config file")
+		return
+	}
+	m.pick = pickState{title: "Activate profile", options: names, apply: func(name string) {
+		m.hf.SetEnabledCategories(m.cfg.Profiles[name].Categories)
+		m.changed("Activated profile " + name)
+	}}
+	if i := slices.Index(names, m.activeProfile()); i >= 0 {
+		m.pick.cursor = i
+	}
+	m.mode = modePick
+}
+
+func (m *model) updatePick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	p := &m.pick
+	switch msg.String() {
+	case "esc", "q":
+		m.mode = modeBrowse
+	case "up", "k":
+		p.cursor = (p.cursor + len(p.options) - 1) % len(p.options)
+	case "down", "j":
+		p.cursor = (p.cursor + 1) % len(p.options)
+	case "enter", " ":
+		m.mode = modeBrowse
+		p.apply(p.options[p.cursor])
+		m.clamp()
+	}
+	return m, nil
+}
+
+// --------------------------------------------------------------------- views
+
+var (
+	accent    = lipgloss.Color("39")
+	dim       = lipgloss.Color("243")
+	green     = lipgloss.Color("76")
+	red       = lipgloss.Color("203")
+	yellow    = lipgloss.Color("214")
+	titleSt   = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	dimSt     = lipgloss.NewStyle().Foreground(dim)
+	onSt      = lipgloss.NewStyle().Foreground(green)
+	errSt     = lipgloss.NewStyle().Foreground(red)
+	warnSt    = lipgloss.NewStyle().Foreground(yellow).Bold(true)
+	cursorSt  = lipgloss.NewStyle().Reverse(true)
+	keySt     = lipgloss.NewStyle().Bold(true)
+	paneSt    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(dim)
+	activeSt  = paneSt.BorderForeground(accent)
+	paneTitle = lipgloss.NewStyle().Bold(true)
+)
+
+// listHeight is the number of entry rows that fit in the entry pane.
+func (m *model) listHeight() int {
+	// header + footer + two border lines + pane title + scroll line
+	return max(1, m.height-6)
+}
 
 func (m *model) View() string {
-	switch m.currentView {
-	case viewMain:
-		return m.viewMain()
-	case viewSearch:
-		return m.viewSearch()
-	case viewHelp:
-		return m.viewHelp()
-	case viewAdd:
-		return m.viewAdd()
-	case viewMove:
-		return m.viewMove()
-	case viewCreateCategory:
-		return m.viewCreateCategory()
-	case viewEdit:
-		return m.viewEdit()
-	}
+	header := m.viewHeader()
+	footer := m.viewFooter()
+	bodyHeight := max(3, m.height-2)
 
-	return ""
-}
-
-func (m *model) viewMain() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Hosts Manager"))
-	b.WriteString("\n")
-
-	if m.searchQuery != "" {
-		b.WriteString(headerStyle.Render(fmt.Sprintf("Search: %s (%d results)", m.searchQuery, len(m.entries))))
+	var body string
+	if m.width < narrowWidth {
+		body = m.viewMain(m.width, bodyHeight, true)
 	} else {
-		b.WriteString(headerStyle.Render(fmt.Sprintf("Total entries: %d", len(m.entries))))
+		left := m.viewCategories(sidebarWidth, bodyHeight)
+		right := m.viewMain(m.width-sidebarWidth, bodyHeight, false)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	}
+	// The bars must not wrap: a wrapped line pushes the frame off screen.
+	header = ansi.Truncate(header, m.width, "…")
+	footer = ansi.Truncate(footer, m.width, "…")
+	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+}
 
-	currentCategory := ""
-	for i, entry := range m.entries {
-		if entry.category != currentCategory {
-			currentCategory = entry.category
-			b.WriteString(categoryStyle.Render(fmt.Sprintf("\n=== %s ===", strings.ToUpper(currentCategory))))
-			b.WriteString("\n")
-		}
-
-		cursor := "  "
-		if m.cursor == i {
-			cursor = "> "
-		}
-
-		status := "✗"
-		style := disabledStyle
-		if entry.entry.Enabled {
-			status = "✓"
-			style = enabledStyle
-		}
-
-		line := fmt.Sprintf("%s%s %s -> %s",
-			cursor,
-			status,
-			entry.entry.IP,
-			strings.Join(entry.entry.Hostnames, " "))
-
-		if entry.entry.Comment != "" {
-			line += " # " + entry.entry.Comment
-		}
-
-		if m.cursor == i {
-			line = selectedStyle.Render(line)
-		} else {
-			line = style.Render(line)
-		}
-
-		b.WriteString(line)
-		b.WriteString("\n")
+func (m *model) viewHeader() string {
+	left := titleSt.Render(" hosts-manager ") + dimSt.Render(m.hf.FilePath)
+	right := "profile: " + m.activeProfile()
+	if m.dryRun {
+		right = warnSt.Render("dry run") + "  " + right
 	}
+	if m.unsaved > 0 {
+		right += "  " + warnSt.Render(fmt.Sprintf("● %d unsaved", m.unsaved))
+	}
+	gap := max(1, m.width-lipgloss.Width(left)-lipgloss.Width(right)-1)
+	return left + strings.Repeat(" ", gap) + right
+}
 
+func (m *model) viewFooter() string {
+	if m.mode == modeConfirmQuit {
+		return warnSt.Render(fmt.Sprintf(" %d unsaved change(s) — ", m.unsaved)) +
+			keys("s", "save & quit", "q", "discard & quit", "esc", "stay")
+	}
 	if m.message != "" {
-		b.WriteString("\n")
-		if strings.HasPrefix(m.message, "Error") || strings.HasPrefix(m.message, "Failed") {
-			b.WriteString(errorStyle.Render(m.message))
+		if m.isError {
+			return " " + errSt.Render(m.message)
+		}
+		return " " + onSt.Render(m.message)
+	}
+	if m.mode == modeForm {
+		return keys("tab", "next field", "enter", "save", "esc", "cancel")
+	}
+	if m.mode == modePick {
+		return keys("↑↓", "choose", "enter", "apply", "esc", "cancel")
+	}
+	if m.width < narrowWidth {
+		return keys("space", "toggle", "←→", "category", "a", "add", "e", "edit", "s", "save", "?", "help")
+	}
+	if m.focus == focusCategories {
+		return keys("space", "toggle category", "→", "entries", "a", "add", "p", "profile", "s", "save", "?", "help", "q", "quit")
+	}
+	return keys("space", "toggle", "a", "add", "e", "edit", "d", "delete", "m", "move", "/", "filter", "s", "save", "?", "help")
+}
+
+func keys(pairs ...string) string {
+	var parts []string
+	for i := 0; i+1 < len(pairs); i += 2 {
+		parts = append(parts, keySt.Render(pairs[i])+" "+dimSt.Render(pairs[i+1]))
+	}
+	return " " + strings.Join(parts, dimSt.Render(" · "))
+}
+
+func (m *model) viewCategories(width, height int) string {
+	var lines []string
+	for i, c := range m.hf.Categories {
+		on := enabledCount(c)
+		mark := dimSt.Render("○")
+		if on > 0 {
+			mark = onSt.Render("●")
+		}
+		count := fmt.Sprintf("%d/%d", on, len(c.Entries))
+		name := truncate(c.Name, width-len(count)-7)
+		line := fmt.Sprintf(" %s %s%s%s ", mark, name,
+			strings.Repeat(" ", max(1, width-6-lipgloss.Width(name)-len(count))), count)
+		if i == m.cat && m.filter.Value() == "" {
+			if m.focus == focusCategories {
+				line = cursorSt.Render(line)
+			} else {
+				line = paneTitle.Render(line)
+			}
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		lines = append(lines, dimSt.Render(" none yet — press a"))
+	}
+	lines = lines[:min(len(lines), max(1, height-2))]
+	st := paneSt
+	if m.focus == focusCategories {
+		st = activeSt
+	}
+	return st.Width(width - 2).Height(height - 2).Render(strings.Join(lines, "\n"))
+}
+
+func (m *model) viewMain(width, height int, narrow bool) string {
+	inner := width - 2
+	var content string
+	switch m.mode {
+	case modeForm:
+		content = m.viewForm(inner)
+	case modePick:
+		content = m.viewPick()
+	case modeHelp:
+		content = viewHelp()
+	default:
+		content = m.viewEntries(inner, narrow)
+	}
+	st := paneSt
+	if m.focus == focusEntries || narrow || m.mode != modeBrowse {
+		st = activeSt
+	}
+	return st.Width(inner).Height(height - 2).Render(content)
+}
+
+func (m *model) viewEntries(width int, narrow bool) string {
+	var title string
+	switch {
+	case m.mode == modeFilter || m.filter.Value() != "":
+		title = m.filter.View()
+	case len(m.hf.Categories) == 0:
+		title = "no entries"
+	case narrow:
+		title = fmt.Sprintf("‹ %s ›", m.hf.Categories[m.cat].Name)
+	default:
+		title = m.hf.Categories[m.cat].Name
+	}
+	lines := []string{paneTitle.Render(" " + title)}
+
+	rs := m.rows()
+	filtering := m.filter.Value() != ""
+	ipWidth := 15
+	for _, r := range rs {
+		ipWidth = max(ipWidth, len(m.entry(r).IP))
+	}
+
+	end := min(len(rs), m.offset+m.listHeight())
+	for i := m.offset; i < end; i++ {
+		e := m.entry(rs[i])
+		mark, st := onSt.Render("●"), lipgloss.NewStyle()
+		if !e.Enabled {
+			mark, st = dimSt.Render("○"), dimSt
+		}
+		text := fmt.Sprintf("%-*s  %s", ipWidth, e.IP, strings.Join(e.Hostnames, " "))
+		if filtering {
+			text = fmt.Sprintf("%-12s ", truncate(m.hf.Categories[rs[i].cat].Name, 12)) + text
+		}
+		if e.Comment != "" {
+			text += "  # " + e.Comment
+		}
+		text = truncate(text, width-5)
+		pointer := "  "
+		if i == m.cursor && m.focus == focusEntries {
+			pointer = "▸ "
+			text = cursorSt.Render(text)
 		} else {
-			b.WriteString(successStyle.Render(m.message))
+			text = st.Render(text)
 		}
-		b.WriteString("\n")
+		lines = append(lines, pointer+mark+" "+text)
 	}
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render(controlsView()))
-
-	return b.String()
+	if len(rs) == 0 {
+		lines = append(lines, dimSt.Render("  nothing here — press a to add an entry"))
+	}
+	if len(rs) > m.listHeight() {
+		lines = append(lines, dimSt.Render(fmt.Sprintf("%*s", width-1,
+			fmt.Sprintf("%d–%d of %d", m.offset+1, end, len(rs)))))
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (m *model) viewSearch() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Search Mode"))
-	b.WriteString("\n")
-
-	b.WriteString("Enter search query: ")
-	b.WriteString(m.searchQuery)
-	b.WriteString("_")
-	b.WriteString("\n\n")
-
-	b.WriteString(helpStyle.Render("Press Enter to search, Esc to cancel"))
-
-	return b.String()
-}
-
-func (m *model) viewHelp() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Help"))
-	b.WriteString("\n")
-
-	helpText := `
-Navigation:
-  ↑/k       Move cursor up
-  ↓/j       Move cursor down
-  g         Go to top
-  G         Go to bottom
-
-Actions:
-  space     Toggle entry enabled/disabled
-  a         Add new entry
-  c         Create new category
-  e         Edit selected entry
-  m         Move entry to different category
-  d         Delete entry
-  s         Save changes to hosts file
-  r         Refresh entry list
-  /         Search entries
-  enter     Show entry details
-
-Views:
-  ?/h       Show/hide this help
-  q         Quit application
-  esc       Cancel current action
-
-Search:
-  Search works on hostnames, IPs, comments, and categories.
-  Press Enter to apply search, Esc to cancel.
-`
-
-	b.WriteString(helpText)
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Press ? or h to return to main view"))
-
-	return b.String()
-}
-
-func (m *model) viewAdd() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Add New Entry"))
-	b.WriteString("\n\n")
-
-	// IP field
-	ipLabel := "IP Address:"
-	if m.addField == 0 {
-		ipLabel = selectedStyle.Render("IP Address:")
+func (m *model) viewForm(width int) string {
+	title := "Add entry"
+	if m.form.editing != nil {
+		title = "Edit entry"
 	}
-	fmt.Fprintf(&b, "%s %s\n", ipLabel, m.addIP)
-
-	// Hostnames field
-	hostnamesLabel := "Hostnames:"
-	if m.addField == 1 {
-		hostnamesLabel = selectedStyle.Render("Hostnames:")
-	}
-	fmt.Fprintf(&b, "%s %s\n", hostnamesLabel, m.addHostnames)
-
-	// Comment field
-	commentLabel := "Comment (optional):"
-	if m.addField == 2 {
-		commentLabel = selectedStyle.Render("Comment (optional):")
-	}
-	fmt.Fprintf(&b, "%s %s\n", commentLabel, m.addComment)
-
-	// Category field
-	categoryLabel := "Category:"
-	if m.addField == 3 {
-		categoryLabel = selectedStyle.Render("Category:")
-	}
-	fmt.Fprintf(&b, "%s %s\n", categoryLabel, m.addCategory)
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Press Enter to add entry, Esc to cancel"))
-
-	return b.String()
-}
-
-func (m *model) viewMove() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Move Entry to Category"))
-	b.WriteString("\n\n")
-
-	// Show the entry being moved
-	if m.moveEntryIndex < len(m.entries) {
-		entry := m.entries[m.moveEntryIndex]
-		entryStr := fmt.Sprintf("Moving: %s -> %s",
-			entry.entry.IP,
-			strings.Join(entry.entry.Hostnames, " "))
-		if entry.entry.Comment != "" {
-			entryStr += " # " + entry.entry.Comment
+	lines := []string{paneTitle.Render(" " + title), ""}
+	for i, in := range m.form.inputs {
+		label := fmt.Sprintf(" %-10s ", formLabels[i])
+		if i == m.form.field {
+			label = keySt.Render(label)
+		} else {
+			label = dimSt.Render(label)
 		}
-		b.WriteString(moveStyle.Render(entryStr))
-		b.WriteString("\n")
-		fmt.Fprintf(&b, "From category: %s\n\n", entry.category)
+		in.Width = max(10, width-14)
+		lines = append(lines, label+in.View())
 	}
-
-	b.WriteString("Select target category:\n")
-
-	// Show available categories
-	availableCategories := m.getAvailableCategories()
-	for i, category := range availableCategories {
-		cursor := "  "
-		if i == m.moveCategoryCursor {
-			cursor = "> "
-		}
-
-		line := cursor + category
-		if i == m.moveCategoryCursor {
-			line = selectedStyle.Render(line)
-		}
-
-		b.WriteString(line)
-		b.WriteString("\n")
+	if m.form.field == 3 && len(m.hf.Categories) > 0 {
+		lines = append(lines, dimSt.Render(truncate("            existing: "+strings.Join(m.categoryNames(), ", "), width)))
 	}
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Use ↑/↓ to select category, Enter to move, Esc to cancel"))
-
-	return b.String()
+	lines = append(lines, "")
+	if m.form.err != "" {
+		lines = append(lines, errSt.Render(" ✗ "+truncate(m.form.err, width-4)))
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (m *model) viewCreateCategory() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Create New Category"))
-	b.WriteString("\n\n")
-
-	// Name field
-	nameLabel := "Category Name:"
-	if m.createCategoryField == 0 {
-		nameLabel = selectedStyle.Render("Category Name:")
+func (m *model) viewPick() string {
+	lines := []string{paneTitle.Render(" " + m.pick.title), ""}
+	for i, o := range m.pick.options {
+		if i == m.pick.cursor {
+			lines = append(lines, "▸ "+cursorSt.Render(o))
+		} else {
+			lines = append(lines, "  "+o)
+		}
 	}
-	fmt.Fprintf(&b, "%s %s\n", nameLabel, m.createCategoryName)
-
-	// Description field
-	descLabel := "Description (optional):"
-	if m.createCategoryField == 1 {
-		descLabel = selectedStyle.Render("Description (optional):")
-	}
-	fmt.Fprintf(&b, "%s %s\n", descLabel, m.createCategoryDescription)
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Category names can contain: a-z, A-Z, 0-9, _, -"))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Press Enter to create category, Esc to cancel"))
-
-	return b.String()
+	return strings.Join(lines, "\n")
 }
 
-func (m *model) viewEdit() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Edit Entry"))
-	b.WriteString("\n\n")
-
-	// IP field
-	ipLabel := "IP Address:"
-	if m.editField == 0 {
-		ipLabel = selectedStyle.Render("IP Address:")
+func viewHelp() string {
+	rows := [][2]string{
+		{"tab / ← →", "switch pane (narrow terminal: switch category)"},
+		{"↑ ↓  k j", "move"},
+		{"pgup pgdn  g G", "page, top, bottom"},
+		{"space", "enable/disable entry, or category in the left pane"},
+		{"t", "enable/disable the whole category"},
+		{"a  e  d", "add, edit, delete entry"},
+		{"m", "move entry to another category"},
+		{"/  esc", "filter all categories, clear filter"},
+		{"p", "activate a profile"},
+		{"s", "save (backs up the current file first)"},
+		{"q", "quit (asks if there are unsaved changes)"},
 	}
-	fmt.Fprintf(&b, "%s %s\n", ipLabel, m.editIP)
-
-	// Hostnames field
-	hostnamesLabel := "Hostnames (space separated):"
-	if m.editField == 1 {
-		hostnamesLabel = selectedStyle.Render("Hostnames (space separated):")
+	lines := []string{paneTitle.Render(" Keys"), ""}
+	for _, r := range rows {
+		lines = append(lines, fmt.Sprintf(" %s %s", keySt.Render(fmt.Sprintf("%-15s", r[0])), r[1]))
 	}
-	fmt.Fprintf(&b, "%s %s\n", hostnamesLabel, m.editHostnames)
+	lines = append(lines, "", dimSt.Render(" Changes stay in memory until you save. Any key closes this."))
+	return strings.Join(lines, "\n")
+}
 
-	// Comment field
-	commentLabel := "Comment (optional):"
-	if m.editField == 2 {
-		commentLabel = selectedStyle.Render("Comment (optional):")
+func truncate(s string, n int) string {
+	if n <= 1 || lipgloss.Width(s) <= n {
+		return s
 	}
-	fmt.Fprintf(&b, "%s %s\n", commentLabel, m.editComment)
-
-	// Category field
-	categoryLabel := "Category:"
-	if m.editField == 3 {
-		categoryLabel = selectedStyle.Render("Category:")
+	r := []rune(s)
+	if len(r) > n-1 {
+		r = r[:n-1]
 	}
-	fmt.Fprintf(&b, "%s %s\n", categoryLabel, m.editCategory)
-
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Use Tab/Shift+Tab to navigate fields"))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Press Enter to save changes, Esc to cancel"))
-
-	if m.message != "" {
-		b.WriteString("\n\n")
-		b.WriteString(errorStyle.Render(m.message))
-	}
-
-	return b.String()
+	return string(r) + "…"
 }

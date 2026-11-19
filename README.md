@@ -131,20 +131,30 @@ rejects the whole file.
 
 ### Interactive editor
 
-Run `hosts-manager` with no arguments.
+Run `hosts-manager` with no arguments (with `sudo`, or `--dry-run` to look
+around). Categories are on the left with their enabled/total counts; the
+selected category's entries are on the right. The top bar shows the active
+profile and how many changes are unsaved.
 
-| Key | Action | Key | Action |
-|---|---|---|---|
-| `↑`/`k`, `↓`/`j` | move | `g`, `G` | top, bottom |
-| `space` | enable/disable | `/` | search |
-| `a` | add | `e` | edit |
-| `d` | delete | `m` | move to category |
-| `c` | new category | `r` | refresh |
-| `s` | save | `?` | help |
-| `q` | quit | | |
+| Key | Action |
+|---|---|
+| `tab`, `←` `→` | switch pane |
+| `↑` `↓` / `k` `j`, `pgup` `pgdn`, `g` `G` | move, page, top, bottom |
+| `space` | enable/disable the entry, or the whole category in the left pane |
+| `t` | enable/disable the whole category |
+| `a`, `e`, `d` | add, edit, delete an entry |
+| `m` | move the entry to another category |
+| `/`, `esc` | filter every category by IP, hostname or comment; clear it |
+| `p` | activate a profile |
+| `s` | save |
+| `?` | all keys |
+| `q` | quit; asks first if there are unsaved changes |
 
-Nothing is written until you press `s`. Saving takes a backup and records the
-change in the audit log, like any other command.
+Add and edit check each field as you type, with the same rules as the command
+line. Typing a new name in the category field creates that category. Nothing
+is written until you press `s`; saving takes a backup and records the change in
+the audit log, like any other command. In a terminal narrower than 80 columns
+the category pane is hidden and `←` `→` switch category instead.
 
 ## The hosts file
 
