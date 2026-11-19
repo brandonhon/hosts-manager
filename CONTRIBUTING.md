@@ -58,6 +58,7 @@ git tag v1.2.3 && git push origin v1.2.3
 ```
 
 The release workflow runs the tests and GoReleaser, which builds the archives
-and `SHA256SUMS` and publishes a GitHub release with notes generated from the
-commits since the previous tag. A tag with a suffix, such as `v1.2.3-rc.1`, is
+and `SHA256SUMS` and publishes a GitHub release. If `CHANGELOG.md` has a
+`## [1.2.3]` section, that section is the release notes; otherwise they are
+generated from the commits since the previous tag. A tag with a suffix, such as `v1.2.3-rc.1`, is
 published as a prerelease.

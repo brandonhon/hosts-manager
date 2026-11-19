@@ -2,7 +2,9 @@ name: Release
 
 # Push a tag to release:  git tag v1.2.3 && git push origin v1.2.3
 # A tag with a suffix (v1.2.3-rc.1) is published as a prerelease.
-# Builds, archives, checksums and notes are all defined in .goreleaser.yaml.
+# Builds, archives and checksums are defined in .goreleaser.yaml. If CHANGELOG.md
+# has a "## [X.Y.Z]" section for the tag, that section is the release notes;
+# otherwise notes are generated from the commits since the previous tag.
 on:
   push:
     tags: ['v*']
@@ -25,9 +27,25 @@ jobs:
 
       - run: go test ./...
 
+      - name: Use the CHANGELOG section for this version, if there is one
+        id: notes
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          awk -v heading="## [${GITHUB_REF_NAME#v}]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > "$notes"
+          if grep -q '[^[:space:]]' "$notes"; then
+            echo "Release notes from CHANGELOG.md"
+            echo "args=--release-notes=$notes" >> "$GITHUB_OUTPUT"
+          else
+            echo "No CHANGELOG section for ${GITHUB_REF_NAME}; generating notes from commits"
+          fi
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: '~> v2'
-          args: release --clean
+          args: release --clean ${{ steps.notes.outputs.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
