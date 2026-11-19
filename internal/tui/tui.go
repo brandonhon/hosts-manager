@@ -631,17 +631,19 @@ func (m *model) updatePick(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // --------------------------------------------------------------------- views
 
 var (
-	accent    = lipgloss.Color("39")
-	dim       = lipgloss.Color("243")
-	green     = lipgloss.Color("76")
-	red       = lipgloss.Color("203")
-	yellow    = lipgloss.Color("214")
-	titleSt   = lipgloss.NewStyle().Bold(true).Foreground(accent)
-	dimSt     = lipgloss.NewStyle().Foreground(dim)
-	onSt      = lipgloss.NewStyle().Foreground(green)
-	errSt     = lipgloss.NewStyle().Foreground(red)
-	warnSt    = lipgloss.NewStyle().Foreground(yellow).Bold(true)
-	cursorSt  = lipgloss.NewStyle().Reverse(true)
+	accent  = lipgloss.Color("39")
+	dim     = lipgloss.Color("243")
+	green   = lipgloss.Color("76")
+	red     = lipgloss.Color("203")
+	yellow  = lipgloss.Color("214")
+	titleSt = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	dimSt   = lipgloss.NewStyle().Foreground(dim)
+	onSt    = lipgloss.NewStyle().Foreground(green)
+	errSt   = lipgloss.NewStyle().Foreground(red)
+	warnSt  = lipgloss.NewStyle().Foreground(yellow).Bold(true)
+	// An explicit background rather than reverse video: reverse turns dimmed
+	// (disabled) rows into a glaring block, and not every renderer shows it.
+	cursorSt  = lipgloss.NewStyle().Bold(true).Background(lipgloss.AdaptiveColor{Light: "254", Dark: "238"})
 	keySt     = lipgloss.NewStyle().Bold(true)
 	paneSt    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(dim)
 	activeSt  = paneSt.BorderForeground(accent)
