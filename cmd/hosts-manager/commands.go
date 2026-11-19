@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -300,14 +299,7 @@ enable exactly that profile's categories and disable the rest.`,
 			}
 
 			err := mutate("profile_activate", func(hf *hosts.HostsFile) (string, error) {
-				for i := range hf.Categories {
-					c := &hf.Categories[i]
-					on := slices.Contains(profile.Categories, c.Name)
-					c.Enabled = on
-					for j := range c.Entries {
-						c.Entries[j].Enabled = on
-					}
-				}
+				hf.SetEnabledCategories(profile.Categories)
 				return fmt.Sprintf("Activated profile %s %v", name, profile.Categories), nil
 			})
 			if err != nil || dryRun {
