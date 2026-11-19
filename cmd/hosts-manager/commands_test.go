@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -628,5 +630,71 @@ func TestCommandSurface(t *testing.T) {
 	want := []string{"add", "backup", "config", "disable", "enable", "export", "import", "list", "profile", "restore", "rm"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("commands = %v, want %v", got, want)
+	}
+}
+
+// Commands used wrongly print their help after the error; commands used
+// correctly that fail at run time print only the error.
+func TestUsageErrorsShowCommandHelp(t *testing.T) {
+	cfg = config.DefaultConfig()
+	dryRun = true
+	t.Cleanup(func() { dryRun = false })
+
+	usage := []struct {
+		args     []string
+		helpOf   string // a phrase from that command's help
+		errorMsg string
+	}{
+		{[]string{"add", "10.0.0.1"}, "Add an entry", "requires at least 2 arg(s)"},
+		{[]string{"rm"}, "Remove a hostname", "accepts 1 arg(s)"},
+		{[]string{"list", "--bogus"}, "List entries grouped by category", "unknown flag"},
+		{[]string{"disable"}, "Disable a hostname or a whole category", "requires a hostname"},
+		{[]string{"enable", "a.test", "-c", "dev"}, "Enable a hostname", "not both"},
+		{[]string{"export", "-f", "xml"}, "Export entries", "unsupported format"},
+		{[]string{"backup", "extra"}, "Create a backup", "unknown command"},
+		{[]string{"nosuch"}, "Run with no arguments for the interactive editor", "unknown command"},
+	}
+	for _, tt := range usage {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			root := rootCmd()
+			root.SetArgs(tt.args)
+			err := root.Execute()
+			var out bytes.Buffer
+			reportError(&out, err)
+			if !strings.Contains(out.String(), tt.errorMsg) || !strings.Contains(out.String(), tt.helpOf) ||
+				!strings.Contains(out.String(), "Usage:") {
+				t.Errorf("want error %q and help containing %q, got:\n%s", tt.errorMsg, tt.helpOf, out.String())
+			}
+		})
+	}
+}
+
+// Every command's argument rule must still accept its documented form.
+func TestValidArgumentsAreAccepted(t *testing.T) {
+	cfg = config.DefaultConfig()
+	for _, args := range [][]string{
+		{"list"}, {"list", "q"}, {"add", "10.0.0.1", "a.test", "b.test"}, {"rm", "a.test"},
+		{"enable", "a.test"}, {"disable", "-c", "dev"}, {"profile"}, {"profile", "full"},
+		{"backup"}, {"restore"}, {"restore", "1"}, {"import", "f.yaml"}, {"export"}, {"config"},
+	} {
+		root := rootCmd()
+		sub, rest, err := root.Find(args)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if err := sub.ParseFlags(rest); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if err := sub.ValidateArgs(sub.Flags().Args()); err != nil {
+			t.Errorf("%v rejected: %v", args, err)
+		}
+	}
+}
+
+func TestRuntimeErrorsDoNotShowHelp(t *testing.T) {
+	var out bytes.Buffer
+	reportError(&out, errors.New("hostname not found: x.test"))
+	if out.String() != "Error: hostname not found: x.test\n" {
+		t.Errorf("got %q", out.String())
 	}
 }
