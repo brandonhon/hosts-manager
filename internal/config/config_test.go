@@ -27,17 +27,6 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("Expected verbose to be disabled by default")
 	}
 
-	// Test Categories
-	expectedCategories := []string{"development", "staging", "production", "custom", "vpn", "blocked"}
-	if len(config.Categories) != len(expectedCategories) {
-		t.Errorf("Expected %d categories, got %d", len(expectedCategories), len(config.Categories))
-	}
-	for _, cat := range expectedCategories {
-		if _, exists := config.Categories[cat]; !exists {
-			t.Errorf("Expected category %s to exist", cat)
-		}
-	}
-
 	// Test Profiles
 	expectedProfiles := []string{"minimal", "development", "full"}
 	if len(config.Profiles) != len(expectedProfiles) {
@@ -47,17 +36,6 @@ func TestDefaultConfig(t *testing.T) {
 	// The "full" profile is the one marked default.
 	if !config.Profiles["full"].Default {
 		t.Error("Expected the \"full\" profile to be the default")
-	}
-
-	// Test UI settings
-	if config.UI.ColorScheme != "auto" {
-		t.Errorf("Expected color scheme to be 'auto', got %s", config.UI.ColorScheme)
-	}
-	if !config.UI.ShowLineNumbers {
-		t.Error("Expected show line numbers to be enabled by default")
-	}
-	if config.UI.PageSize != 20 {
-		t.Errorf("Expected page size to be 20, got %d", config.UI.PageSize)
 	}
 
 	// Test Backup settings
@@ -74,76 +52,6 @@ func TestDefaultConfig(t *testing.T) {
 	// Test Export settings
 	if config.Export.DefaultFormat != "yaml" {
 		t.Errorf("Expected default format to be 'yaml', got %s", config.Export.DefaultFormat)
-	}
-	expectedFormats := []string{"yaml", "json", "hosts"}
-	if len(config.Export.Formats) != len(expectedFormats) {
-		t.Errorf("Expected %d formats, got %d", len(expectedFormats), len(config.Export.Formats))
-	}
-}
-
-func TestGetDefaultEditor(t *testing.T) {
-	tests := []struct {
-		name     string
-		editor   string
-		visual   string
-		expected string
-	}{
-		{
-			name:     "no environment variables",
-			editor:   "",
-			visual:   "",
-			expected: "nano",
-		},
-		{
-			name:     "EDITOR set",
-			editor:   "vim",
-			visual:   "",
-			expected: "vim",
-		},
-		{
-			name:     "VISUAL set",
-			editor:   "",
-			visual:   "emacs",
-			expected: "emacs",
-		},
-		{
-			// POSIX convention: $EDITOR may name a line editor for a dumb
-			// terminal, $VISUAL the full-screen one. This asserted the
-			// inverse, so anyone setting both got the wrong editor.
-			name:     "both set, VISUAL takes precedence",
-			editor:   "vim",
-			visual:   "emacs",
-			expected: "emacs",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original env vars
-			originalEditor := os.Getenv("EDITOR")
-			originalVisual := os.Getenv("VISUAL")
-			defer func() {
-				_ = os.Setenv("EDITOR", originalEditor)
-				_ = os.Setenv("VISUAL", originalVisual)
-			}()
-
-			// Set test env vars
-			if tt.editor != "" {
-				_ = os.Setenv("EDITOR", tt.editor)
-			} else {
-				_ = os.Unsetenv("EDITOR")
-			}
-			if tt.visual != "" {
-				_ = os.Setenv("VISUAL", tt.visual)
-			} else {
-				_ = os.Unsetenv("VISUAL")
-			}
-
-			result := getDefaultEditor()
-			if result != tt.expected {
-				t.Errorf("Expected %s, got %s", tt.expected, result)
-			}
-		})
 	}
 }
 
@@ -232,28 +140,8 @@ func TestConfigSerialization(t *testing.T) {
 	if unmarshaledConfig.General.DefaultCategory != config.General.DefaultCategory {
 		t.Error("Default category not preserved during serialization")
 	}
-	if len(unmarshaledConfig.Categories) != len(config.Categories) {
-		t.Error("Categories not preserved during serialization")
-	}
 	if len(unmarshaledConfig.Profiles) != len(config.Profiles) {
 		t.Error("Profiles not preserved during serialization")
-	}
-}
-
-func TestConfigValidation(t *testing.T) {
-	// Test valid config
-	config := DefaultConfig()
-	validator := NewValidator()
-	err := validator.Validate(config)
-	if err != nil {
-		t.Errorf("Default config should be valid, got error: %v", err)
-	}
-
-	// Test invalid config - empty default category
-	config.General.DefaultCategory = ""
-	err = validator.Validate(config)
-	if err == nil {
-		t.Error("Expected validation error for empty default category")
 	}
 }
 
@@ -286,45 +174,43 @@ func isolateConfigDirs(t *testing.T) {
 	}
 }
 
-// TestLoadWithUnrecognizedEditor guards the regression where an $EDITOR outside
-// the hardcoded whitelist made config validation fail, which made Load return
-// an error, which made main exit 1 on every command including read-only ones.
-func TestLoadWithUnrecognizedEditor(t *testing.T) {
-	for _, editor := range []string{"nvim", "helix", "micro", "/usr/bin/vim"} {
-		t.Run(editor, func(t *testing.T) {
-			isolateConfigDirs(t)
-			t.Setenv("EDITOR", editor)
-
-			config, err := Load()
-			if err != nil {
-				t.Fatalf("Load() with EDITOR=%s should succeed, got: %v", editor, err)
-			}
-			if config == nil {
-				t.Fatal("Load() returned a nil config")
-			}
-			if config.General.Editor != editor {
-				t.Errorf("Editor = %q, want %q", config.General.Editor, editor)
-			}
-		})
-	}
-}
-
-// TestLoadPersistsUnrecognizedEditor checks the second run too: the first run
-// writes the config to disk, so the read path must accept it as well.
-func TestLoadPersistsUnrecognizedEditor(t *testing.T) {
+// TestLoadIgnoresRemovedKeys guards upgrades: config files written by older
+// versions carry ui, categories, editor and export.formats sections that no
+// longer exist, and must still load.
+func TestLoadIgnoresRemovedKeys(t *testing.T) {
 	isolateConfigDirs(t)
-	t.Setenv("EDITOR", "nvim")
-
-	if _, err := Load(); err != nil {
-		t.Fatalf("first Load() should succeed, got: %v", err)
+	dir := platform.New().GetConfigDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	old := `general:
+  default_category: custom
+  auto_backup: true
+  editor: nvim
+categories:
+  custom: User-defined entries
+profiles:
+  full: {description: all, categories: [custom], default: true}
+ui:
+  color_scheme: auto
+  page_size: 20
+  key_bindings: {quit: q}
+backup: {max_backups: 10, retention_days: 30, compression_type: gzip}
+export:
+  default_format: yaml
+  formats:
+    yaml: {extension: .yaml, template: "{{.}}"}
+`
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(old), 0600); err != nil {
+		t.Fatal(err)
 	}
 
 	config, err := Load()
 	if err != nil {
-		t.Fatalf("second Load() should succeed, got: %v", err)
+		t.Fatalf("Load() of an older config file failed: %v", err)
 	}
-	if config.General.Editor != "nvim" {
-		t.Errorf("Editor = %q, want %q", config.General.Editor, "nvim")
+	if config.General.DefaultCategory != "custom" || !config.Profiles["full"].Default {
+		t.Errorf("kept settings not loaded: %+v", config)
 	}
 }
 

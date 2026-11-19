@@ -425,24 +425,22 @@ func TestConfigOperations(t *testing.T) {
 			t.Fatal("Config should not be nil")
 		}
 
-		// Check default categories exist
-		if len(cfg.Categories) == 0 {
-			t.Error("Default categories should not be empty")
+		if len(cfg.Profiles) == 0 {
+			t.Error("Default profiles should not be empty")
 		}
 	})
 
 	t.Run("modify config", func(t *testing.T) {
 		cfg := ctx.LoadConfig()
 
-		// Add custom category to config
-		cfg.Categories["custom-test"] = "Custom test category"
+		cfg.General.DefaultCategory = "custom-test"
 
 		ctx.WriteConfig(cfg)
 
 		// Reload and verify
 		reloaded := ctx.LoadConfig()
-		if _, found := reloaded.Categories["custom-test"]; !found {
-			t.Error("Custom category not found in reloaded config")
+		if reloaded.General.DefaultCategory != "custom-test" {
+			t.Error("Changed default category not found in reloaded config")
 		}
 	})
 }

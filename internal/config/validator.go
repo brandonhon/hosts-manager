@@ -1,417 +1,60 @@
 package config
 
 import (
+	"errors"
 	"fmt"
-	"path/filepath"
 	"regexp"
-	"sort"
-	"strings"
+	"slices"
 )
 
-// ValidationError represents a configuration validation error
-type ValidationError struct {
-	Field   string
-	Value   interface{}
-	Message string
-}
+// nameRegex matches category and profile names. A category name is written to
+// the hosts file as an @category marker, so this also keeps it to one token.
+var nameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,50}$`)
 
-func (e ValidationError) Error() string {
-	return fmt.Sprintf("validation error in field '%s': %s (value: %v)", e.Field, e.Message, e.Value)
-}
+// Validate reports every problem with config at once, so a user fixing their
+// config file sees the whole list rather than one error per attempt.
+func Validate(config *Config) error {
+	var errs []error
+	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
 
-// ConfigValidator validates configuration values
-type ConfigValidator struct {
-	errors   []ValidationError
-	warnings []string
-}
-
-// NewValidator creates a new configuration validator
-func NewValidator() *ConfigValidator {
-	return &ConfigValidator{
-		errors:   make([]ValidationError, 0),
-		warnings: make([]string, 0),
-	}
-}
-
-// Validate validates the entire configuration
-func (v *ConfigValidator) Validate(config *Config) error {
-	v.errors = make([]ValidationError, 0)
-	v.warnings = make([]string, 0)
-
-	// Validate General section
-	v.validateGeneral(&config.General)
-
-	// Validate Categories
-	v.validateCategories(config.Categories)
-
-	// Validate Profiles
-	v.validateProfiles(config.Profiles)
-
-	// Validate UI section
-	v.validateUI(&config.UI)
-
-	// Validate Backup section
-	v.validateBackup(&config.Backup)
-
-	// Validate Export section
-	v.validateExport(&config.Export)
-
-	// Return combined errors if any
-	if len(v.errors) > 0 {
-		return fmt.Errorf("configuration validation failed with %d errors: %v", len(v.errors), v.errors)
+	if !nameRegex.MatchString(config.General.DefaultCategory) {
+		add("general.default_category %q: must be 1-50 letters, digits, '-' or '_'", config.General.DefaultCategory)
 	}
 
-	return nil
-}
-
-// validateGeneral validates the General configuration section
-func (v *ConfigValidator) validateGeneral(general *General) {
-	// Validate default category
-	if general.DefaultCategory == "" {
-		v.addError("general.default_category", general.DefaultCategory, "default category cannot be empty")
-	} else if !isValidCategoryName(general.DefaultCategory) {
-		v.addError("general.default_category", general.DefaultCategory, "invalid category name format")
-	}
-
-	// An unrecognized editor is a warning, not an error. It affects only
-	// `config --edit`, which re-checks the editor and refuses to launch an
-	// unrecognized one. Rejecting it here would make an unusable $EDITOR
-	// abort config loading, and with it every command the tool offers.
-	if general.Editor != "" && !IsValidEditor(general.Editor) {
-		v.addWarning("general.editor: %q is not a recognized editor; `hosts-manager config --edit` will refuse to launch it", general.Editor)
-	}
-}
-
-// validateCategories validates the Categories configuration
-func (v *ConfigValidator) validateCategories(categories map[string]string) {
-	if len(categories) == 0 {
-		v.addError("categories", categories, "at least one category must be defined")
-		return
-	}
-
-	for name, description := range categories {
-		// Validate category name
-		if !isValidCategoryName(name) {
-			v.addError(fmt.Sprintf("categories.%s", name), name, "invalid category name format")
+	defaults := 0
+	for name, profile := range config.Profiles {
+		if !nameRegex.MatchString(name) {
+			add("profiles.%s: name must be 1-50 letters, digits, '-' or '_'", name)
 		}
-
-		// Validate description
-		if len(description) > 200 {
-			v.addError(fmt.Sprintf("categories.%s.description", name), description, "description too long (max 200 characters)")
-		}
-
-		// Check for dangerous content in description
-		if containsSuspiciousContent(description) {
-			v.addError(fmt.Sprintf("categories.%s.description", name), description, "description contains potentially dangerous content")
-		}
-	}
-}
-
-// validateProfiles validates the Profiles configuration
-func (v *ConfigValidator) validateProfiles(profiles map[string]Profile) {
-	defaultCount := 0
-
-	for name, profile := range profiles {
-		// Validate profile name
-		if !isValidProfileName(name) {
-			v.addError(fmt.Sprintf("profiles.%s", name), name, "invalid profile name format")
-		}
-
-		// Validate description
-		if len(profile.Description) > 200 {
-			v.addError(fmt.Sprintf("profiles.%s.description", name), profile.Description, "description too long (max 200 characters)")
-		}
-
-		// Check for dangerous content in description
-		if containsSuspiciousContent(profile.Description) {
-			v.addError(fmt.Sprintf("profiles.%s.description", name), profile.Description, "description contains potentially dangerous content")
-		}
-
-		// Validate categories
 		if len(profile.Categories) == 0 {
-			v.addError(fmt.Sprintf("profiles.%s.categories", name), profile.Categories, "profile must have at least one category")
+			add("profiles.%s: must list at least one category", name)
 		}
-
-		for _, categoryName := range profile.Categories {
-			if !isValidCategoryName(categoryName) {
-				v.addError(fmt.Sprintf("profiles.%s.categories", name), categoryName, "invalid category name in profile")
+		for _, c := range profile.Categories {
+			if !nameRegex.MatchString(c) {
+				add("profiles.%s: invalid category name %q", name, c)
 			}
 		}
-
-		// Count default profiles
 		if profile.Default {
-			defaultCount++
+			defaults++
 		}
 	}
-
-	// Ensure exactly one default profile
-	if defaultCount == 0 {
-		v.addError("profiles", profiles, "exactly one profile must be marked as default")
-	} else if defaultCount > 1 {
-		v.addError("profiles", profiles, "only one profile can be marked as default")
-	}
-}
-
-// validateUI validates the UI configuration section
-func (v *ConfigValidator) validateUI(ui *UI) {
-	// Validate color scheme
-	validColorSchemes := []string{"auto", "light", "dark", "none"}
-	if !contains(validColorSchemes, ui.ColorScheme) {
-		v.addError("ui.color_scheme", ui.ColorScheme, "invalid color scheme")
+	if len(config.Profiles) > 0 && defaults != 1 {
+		add("profiles: exactly one must be marked default, found %d", defaults)
 	}
 
-	// Validate page size
-	if ui.PageSize < 1 || ui.PageSize > 1000 {
-		v.addError("ui.page_size", ui.PageSize, "page size must be between 1 and 1000")
+	if config.Backup.MaxBackups < 1 || config.Backup.MaxBackups > 100 {
+		add("backup.max_backups %d: must be between 1 and 100", config.Backup.MaxBackups)
+	}
+	if config.Backup.RetentionDays < 1 || config.Backup.RetentionDays > 3650 {
+		add("backup.retention_days %d: must be between 1 and 3650", config.Backup.RetentionDays)
+	}
+	if !slices.Contains([]string{"none", "gzip"}, config.Backup.CompressionType) {
+		add("backup.compression_type %q: must be none or gzip", config.Backup.CompressionType)
 	}
 
-	// Validate key bindings
-	for action, key := range ui.KeyBindings {
-		if !isValidKeyBinding(key) {
-			v.addError(fmt.Sprintf("ui.key_bindings.%s", action), key, "invalid key binding format")
-		}
-	}
-}
-
-// validateBackup validates the Backup configuration section
-func (v *ConfigValidator) validateBackup(backup *Backup) {
-	// Validate directory path
-	if backup.Directory != "" && containsSuspiciousPath(backup.Directory) {
-		v.addError("backup.directory", backup.Directory, "potentially unsafe directory path")
+	if !slices.Contains([]string{"json", "yaml", "hosts"}, config.Export.DefaultFormat) {
+		add("export.default_format %q: must be json, yaml or hosts", config.Export.DefaultFormat)
 	}
 
-	// Validate max backups
-	if backup.MaxBackups < 1 || backup.MaxBackups > 100 {
-		v.addError("backup.max_backups", backup.MaxBackups, "max backups must be between 1 and 100")
-	}
-
-	// Validate retention days
-	if backup.RetentionDays < 1 || backup.RetentionDays > 3650 {
-		v.addError("backup.retention_days", backup.RetentionDays, "retention days must be between 1 and 3650")
-	}
-
-	// Validate compression type
-	validCompressionTypes := []string{"none", "gzip"}
-	if !contains(validCompressionTypes, backup.CompressionType) {
-		v.addError("backup.compression_type", backup.CompressionType, "invalid compression type")
-	}
-}
-
-// validateExport validates the Export configuration section
-func (v *ConfigValidator) validateExport(export *Export) {
-	// Validate default format
-	if export.DefaultFormat == "" {
-		v.addError("export.default_format", export.DefaultFormat, "default format cannot be empty")
-	}
-
-	// Validate formats
-	for name, format := range export.Formats {
-		if !isValidFormatName(name) {
-			v.addError(fmt.Sprintf("export.formats.%s", name), name, "invalid format name")
-		}
-
-		// Validate extension
-		if !strings.HasPrefix(format.Extension, ".") {
-			v.addError(fmt.Sprintf("export.formats.%s.extension", name), format.Extension, "extension must start with '.'")
-		}
-
-		// Validate template for suspicious content
-		if containsSuspiciousTemplate(format.Template) {
-			v.addError(fmt.Sprintf("export.formats.%s.template", name), format.Template, "template contains potentially dangerous content")
-		}
-	}
-}
-
-// Helper functions
-
-func (v *ConfigValidator) addError(field string, value interface{}, message string) {
-	v.errors = append(v.errors, ValidationError{
-		Field:   field,
-		Value:   value,
-		Message: message,
-	})
-}
-
-func (v *ConfigValidator) addWarning(format string, args ...interface{}) {
-	v.warnings = append(v.warnings, fmt.Sprintf(format, args...))
-}
-
-// Warnings returns the non-fatal issues found by the most recent Validate
-// call. Unlike errors these do not prevent the configuration from loading.
-func (v *ConfigValidator) Warnings() []string {
-	return v.warnings
-}
-
-func isValidCategoryName(name string) bool {
-	if len(name) == 0 || len(name) > 50 {
-		return false
-	}
-	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, name)
-	return matched
-}
-
-func isValidProfileName(name string) bool {
-	if len(name) == 0 || len(name) > 50 {
-		return false
-	}
-	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, name)
-	return matched
-}
-
-func isValidFormatName(name string) bool {
-	if len(name) == 0 || len(name) > 20 {
-		return false
-	}
-	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]+$`, name)
-	return matched
-}
-
-var allowedEditors = map[string]bool{
-	"nano":         true,
-	"vim":          true,
-	"vi":           true,
-	"emacs":        true,
-	"code":         true,
-	"notepad":      true,
-	"notepad++":    true,
-	"sublime_text": true,
-	"atom":         true,
-	"gedit":        true,
-	"kate":         true,
-}
-
-// IsValidEditor reports whether an editor command is one this tool is willing
-// to launch. It is the single implementation: `config --edit` and the config
-// validator both call it, so a value cannot be accepted in one place and
-// rejected in the other.
-//
-// There used to be two copies that disagreed in both directions — the
-// validator rejected "/usr/bin/vim" while the command accepted it, and the
-// command rejected "code --wait" while the validator accepted it — because one
-// split on whitespace and the other took the path base. Neither handled both,
-// so "/usr/bin/vim -u NONE" was rejected everywhere.
-//
-// An unrecognized editor is not fatal; Load reports it as a warning. This gate
-// is what stops it actually being run.
-func IsValidEditor(editor string) bool {
-	editorCmd := strings.TrimSpace(editor)
-	if editorCmd == "" {
-		return false
-	}
-
-	// Reject anything that would change the meaning of the command if it ever
-	// reached a shell. runCommand does not use one, but the editor string
-	// comes from the environment and this is cheap insurance.
-	if strings.ContainsAny(editorCmd, ";&|`$\n\r") {
-		return false
-	}
-
-	// Take the first field, then its path base: handles a bare name, a full
-	// path, arguments, and a full path with arguments.
-	fields := strings.Fields(editorCmd)
-	if len(fields) == 0 {
-		return false
-	}
-
-	baseName := strings.ToLower(filepath.Base(fields[0]))
-	baseName = strings.TrimSuffix(baseName, ".exe")
-
-	return allowedEditors[baseName]
-}
-
-// AllowedEditors returns the editor names this tool will launch, sorted, for
-// use in user-facing messages.
-func AllowedEditors() []string {
-	names := make([]string, 0, len(allowedEditors))
-	for name := range allowedEditors {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-func isValidKeyBinding(key string) bool {
-	if len(key) == 0 || len(key) > 10 {
-		return false
-	}
-
-	// Allow common key bindings
-	validKeys := map[string]bool{
-		"q": true, "?": true, "e": true, "space": true, "d": true, "/": true,
-		"n": true, "p": true, "r": true, "s": true, "a": true, "h": true,
-		"j": true, "k": true, "l": true, "enter": true, "esc": true,
-		"tab": true, "up": true, "down": true, "left": true, "right": true,
-	}
-
-	if validKeys[strings.ToLower(key)] {
-		return true
-	}
-
-	// Allow single characters and some special keys
-	validKeyPattern := `^[a-zA-Z0-9?/]$|^(ctrl|alt|shift)\+[a-zA-Z0-9]$|^F[0-9]{1,2}$`
-	matched, _ := regexp.MatchString(validKeyPattern, key)
-	return matched
-}
-
-func containsSuspiciousContent(content string) bool {
-	suspiciousPatterns := []string{
-		"<script", "javascript:", "data:", "vbscript:",
-		"onclick=", "onload=", "onerror=",
-		"eval(", "setTimeout(", "setInterval(",
-		"document.", "window.", "alert(",
-	}
-
-	lowerContent := strings.ToLower(content)
-	for _, pattern := range suspiciousPatterns {
-		if strings.Contains(lowerContent, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func containsSuspiciousPath(path string) bool {
-	suspiciousPatterns := []string{
-		"..", "/etc/", "/proc/", "/sys/", "/dev/",
-		"C:\\Windows\\", "C:\\System32\\", "\\etc\\",
-		"\x00", // null byte
-	}
-
-	for _, pattern := range suspiciousPatterns {
-		if strings.Contains(path, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func containsSuspiciousTemplate(template string) bool {
-	// Allow basic Go template syntax but check for dangerous patterns
-	suspiciousPatterns := []string{
-		"exec", "system", "cmd", "shell", // System execution functions
-		"file", "read", "write", // File operations (but allow basic templates)
-		"{{call", "{{with ", // Potentially dangerous template functions
-		"os.", "runtime.", "unsafe.", // Dangerous Go packages
-		"import", "package", // Code injection attempts
-	}
-
-	lowerTemplate := strings.ToLower(template)
-	for _, pattern := range suspiciousPatterns {
-		if strings.Contains(lowerTemplate, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return errors.Join(errs...)
 }
