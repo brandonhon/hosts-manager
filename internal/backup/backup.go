@@ -12,7 +12,7 @@ import (
 
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
-	"github.com/brandonhon/hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/internal/platform"
 )
 
 type Manager struct {

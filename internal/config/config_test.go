@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brandonhon/hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/internal/platform"
 	"gopkg.in/yaml.v3"
 )
 

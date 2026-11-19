@@ -13,7 +13,7 @@ import (
 	"github.com/brandonhon/hosts-manager/internal/backup"
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
-	"github.com/brandonhon/hosts-manager/pkg/platform"
+	"github.com/brandonhon/hosts-manager/internal/platform"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
