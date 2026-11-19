@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/brandonhon/hosts-manager/internal/audit"
@@ -129,13 +130,10 @@ func saveHosts(op, summary string, hf *hosts.HostsFile) error {
 		}
 	}
 
-	err := hf.Write(platform.New().GetHostsFilePath())
-	if logger, logErr := audit.NewLogger(); logErr == nil {
-		msg := ""
-		if err != nil {
-			msg = err.Error()
-		}
-		logger.LogHostsOperation(op, "", []string{summary}, err == nil, msg)
+	p := platform.New()
+	err := hf.Write(p.GetHostsFilePath())
+	if logErr := audit.Record(filepath.Join(p.GetDataDir(), "audit"), op, summary, err); logErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not record change in audit log: %v\n", logErr)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to write hosts file: %w", err)
