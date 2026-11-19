@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1093,5 +1095,25 @@ func TestViewEditRendering(t *testing.T) {
 	}
 	if !strings.Contains(output, "Enter to save") {
 		t.Errorf("Expected output to contain save instructions")
+	}
+}
+
+// A dry run skips the privilege check, so saving must not touch the file.
+func TestSaveFileDryRunDoesNotWrite(t *testing.T) {
+	m := createTestModel()
+	m.dryRun = true
+	m.hostsFile.FilePath = filepath.Join(t.TempDir(), "hosts")
+
+	msg := m.saveFile()()
+	if _, ok := msg.(dryRunMsg); !ok {
+		t.Fatalf("expected dryRunMsg, got %T", msg)
+	}
+	if _, err := os.Stat(m.hostsFile.FilePath); !os.IsNotExist(err) {
+		t.Fatalf("dry-run save wrote the hosts file (stat err: %v)", err)
+	}
+
+	m.Update(msg)
+	if !strings.Contains(m.message, "Dry run") {
+		t.Errorf("expected dry-run message, got %q", m.message)
 	}
 }

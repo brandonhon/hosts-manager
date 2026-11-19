@@ -114,13 +114,20 @@ func tuiCmd() *cobra.Command {
 		Short: "Start interactive TUI mode",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
+			// The TUI can save, so it needs the same privileges as every other
+			// writing command. Checking here rather than on save means a user
+			// without them is told before making edits, not after.
+			if err := requireHostsWriteAccess(p); err != nil {
+				return err
+			}
+
 			parser := hosts.NewParser(p.GetHostsFilePath())
 			hostsFile, err := parser.Parse()
 			if err != nil {
 				return fmt.Errorf("failed to parse hosts file: %w", err)
 			}
 
-			return tui.Run(hostsFile, cfg)
+			return tui.Run(hostsFile, cfg, dryRun)
 		},
 	}
 
