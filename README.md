@@ -9,6 +9,8 @@ macOS and Windows. Entries are grouped into categories you can switch on and off
 together, profiles switch several categories at once, and every change is backed
 up first.
 
+![The interactive editor: categories on the left with enabled counts, the dev category's entries on the right](docs/images/tui-main.png)
+
 ## Install
 
 Download the archive for your platform from the
@@ -151,11 +153,15 @@ profile and how many changes are unsaved.
 | `?` | all keys |
 | `q` | quit; asks first if there are unsaved changes |
 
+![Adding an entry: the form flags an invalid hostname as it is typed](docs/images/tui-add.png)
+
 Add and edit check each field as you type, with the same rules as the command
 line. Typing a new name in the category field creates that category. Nothing
 is written until you press `s`; saving takes a backup and records the change in
 the audit log, like any other command. In a terminal narrower than 80 columns
 the category pane is hidden and `←` `→` switch category instead.
+
+![Filtering with /api: matching entries from every category, with the category in the first column](docs/images/tui-filter.png)
 
 ## The hosts file
 
