@@ -1,0 +1,33 @@
+# Release builds. Pushing a vX.Y.Z tag runs this via .github/workflows/release.yml.
+# Try it locally with `make snapshot`.
+version: 2
+project_name: hosts-manager
+
+builds:
+  - main: ./cmd/hosts-manager
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Tag }}"]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: SHA256SUMS
+
+# Notes are generated from the commits since the previous tag.
+changelog:
+  use: github
+  sort: asc
+
+release:
+  prerelease: auto
