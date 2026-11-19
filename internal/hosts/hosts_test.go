@@ -1796,3 +1796,32 @@ func TestParseWriteRoundTripPreservesComments(t *testing.T) {
 		}
 	})
 }
+
+// Category names may contain hyphens (validateCategoryName allows them), so
+// the @category marker must read them back; it used to stop at the hyphen and
+// the entries fell into the default category on the next parse.
+func TestHyphenatedCategoryRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	hf, err := NewParser(path).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := hf.AddEntry(Entry{IP: "10.0.0.1", Hostnames: []string{"a.test"}, Category: "my-lab", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hf.Write(path); err != nil {
+		t.Fatal(err)
+	}
+
+	reread, err := NewParser(path).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := reread.GetCategory("my-lab")
+	if c == nil || len(c.Entries) != 1 {
+		t.Fatalf("category my-lab lost on re-parse: %+v", reread.Categories)
+	}
+}

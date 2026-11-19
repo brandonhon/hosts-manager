@@ -13,7 +13,7 @@ import (
 var (
 	commentLineRegex = regexp.MustCompile(`^\s*#(.*)$`)
 	entryLineRegex   = regexp.MustCompile(`^\s*([0-9a-fA-F:.]+)\s+([^\s#]+(?:\s+[^\s#]+)*)\s*(?:#(.*))?$`)
-	categoryRegex    = regexp.MustCompile(`^\s*#\s*@category\s+(\w+)(?:\s+(.*))?$`)
+	categoryRegex    = regexp.MustCompile(`^\s*#\s*@category\s+([\w-]+)(?:\s+(.*))?$`)
 	sectionRegex     = regexp.MustCompile(`^\s*#\s*===+\s*(.*?)\s*===+\s*$`)
 )
 
