@@ -1,21 +1,10 @@
 # Changelog
 
-All notable changes to hosts-manager are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-Per-tag [GitHub Releases](https://github.com/brandonhon/hosts-manager/releases) hold the
-full commit-level list; this file curates the highlights and behavior changes. The
-release workflow uses the section for the version being cut as the release body, so a
-stable release cannot be published without one.
-
-Build-infrastructure changes (CI workflows, pinned tool versions) are recorded too, under
-**Changed** and labelled as such. They don't reach the released binaries — they're listed
-so the provenance of a build is auditable from one file.
-
-Entries up to and including `[0.6.1]` were generated automatically from commit messages
-and use inline compare links in their headings. From `[Unreleased]` onward they are
-hand-written, and compare links live in the reference list at the bottom of the file.
+**This file is frozen.** Release notes for every release after 0.7.0-rc.1 are
+generated from the commit history and published on the
+[releases page](https://github.com/brandonhon/hosts-manager/releases). It is kept
+for the history of earlier versions. The `[Unreleased]` section below records changes
+made after 0.6.1, up to the freeze; they ship in the first release after it.
 
 ## [Unreleased]
 
