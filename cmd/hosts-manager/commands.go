@@ -160,7 +160,7 @@ func exportCmd() *cobra.Command {
 			case "hosts":
 				data, err = exportToHosts(hostsFile)
 			default:
-				return fmt.Errorf("unsupported format: %s", format)
+				return usageErrorf(cmd, "unsupported format %q: use json, yaml or hosts", format)
 			}
 
 			if err != nil {
@@ -216,7 +216,7 @@ all entries unless --merge. Every entry is validated before anything is written.
 			case "yaml":
 				err = yaml.Unmarshal(data, &importedHosts)
 			default:
-				return fmt.Errorf("unsupported import format: %s", format)
+				return usageErrorf(cmd, "unsupported import format %q: use json or yaml", format)
 			}
 
 			if err != nil {

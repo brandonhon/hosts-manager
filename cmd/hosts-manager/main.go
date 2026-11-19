@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,8 +36,47 @@ func main() {
 	}
 
 	if err := rootCmd().Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		reportError(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+// usageError is a command used wrongly (wrong arguments, unknown flag, bad
+// flag value), as opposed to a correct command that failed. Only these get
+// the command's help printed after them.
+type usageError struct {
+	cmd *cobra.Command
+	err error
+}
+
+func (e usageError) Error() string { return e.err.Error() }
+
+func usageErrorf(cmd *cobra.Command, format string, args ...any) error {
+	return usageError{cmd, fmt.Errorf(format, args...)}
+}
+
+// checkArgs wraps an argument validator so its failures are usage errors. A
+// command that declares none takes no arguments; cobra would otherwise
+// accept and ignore any it was given.
+func checkArgs(validate cobra.PositionalArgs) cobra.PositionalArgs {
+	if validate == nil {
+		validate = cobra.NoArgs
+	}
+	return func(cmd *cobra.Command, args []string) error {
+		if err := validate(cmd, args); err != nil {
+			return usageError{cmd, err}
+		}
+		return nil
+	}
+}
+
+func reportError(w io.Writer, err error) {
+	fmt.Fprintf(w, "Error: %v\n", err)
+	var ue usageError
+	if errors.As(err, &ue) {
+		fmt.Fprintln(w)
+		ue.cmd.SetOut(w)
+		_ = ue.cmd.Help()
 	}
 }
 
@@ -49,9 +90,9 @@ profiles that switch categories on and off, and automatic backups.
 Run with no arguments for the interactive editor.`,
 		Version: version,
 		Args:    cobra.NoArgs,
-		// A failed command should print its error, not the whole usage text.
-		SilenceUsage: true,
-		// main prints the error; letting cobra print it too doubled it.
+		// main prints errors, and the help only for usage errors; cobra would
+		// print the error twice and the usage for every failure.
+		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTUI()
@@ -74,6 +115,12 @@ Run with no arguments for the interactive editor.`,
 		exportCmd(),
 		configCmd(),
 	)
+
+	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error { return usageError{c, err} })
+	cmd.Args = checkArgs(cmd.Args)
+	for _, sub := range cmd.Commands() {
+		sub.Args = checkArgs(sub.Args)
+	}
 
 	return cmd
 }
@@ -323,10 +370,11 @@ func toggleCmd(action string, enable bool) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   action + " <hostname> | " + action + " -c <category>",
 		Short: strings.ToUpper(action[:1]) + action[1:] + " a hostname or a whole category",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if category != "" {
 				if len(args) != 0 {
-					return fmt.Errorf("give a hostname or --category, not both")
+					return usageErrorf(cmd, "give a hostname or --category, not both")
 				}
 				return mutate(action, func(hf *hosts.HostsFile) (string, error) {
 					if hf.GetCategory(category) == nil {
@@ -342,7 +390,7 @@ func toggleCmd(action string, enable bool) *cobra.Command {
 			}
 
 			if len(args) != 1 {
-				return fmt.Errorf("requires a hostname, or --category")
+				return usageErrorf(cmd, "requires a hostname, or --category")
 			}
 			hostname := args[0]
 			return mutate(action, func(hf *hosts.HostsFile) (string, error) {
