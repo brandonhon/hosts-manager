@@ -14,7 +14,8 @@ import (
 type model struct {
 	hostsFile    *hosts.HostsFile
 	config       *config.Config
-	dryRun       bool // save reports instead of writing
+	dryRun       bool                         // save reports instead of writing
+	save         func(*hosts.HostsFile) error // backs up, writes and audits
 	currentView  view
 	cursor       int
 	selected     map[int]bool
@@ -186,11 +187,12 @@ func controlsView() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, row1, row2, row3)
 }
 
-func Run(hostsFile *hosts.HostsFile, cfg *config.Config, dryRun bool) error {
+func Run(hostsFile *hosts.HostsFile, cfg *config.Config, dryRun bool, save func(*hosts.HostsFile) error) error {
 	m := model{
 		hostsFile:   hostsFile,
 		config:      cfg,
 		dryRun:      dryRun,
+		save:        save,
 		currentView: viewMain,
 		selected:    make(map[int]bool),
 		entries:     buildEntryList(hostsFile),
@@ -902,7 +904,7 @@ func (m *model) saveFile() tea.Cmd {
 		if m.dryRun {
 			return dryRunMsg{}
 		}
-		if err := m.hostsFile.Write(m.hostsFile.FilePath); err != nil {
+		if err := m.save(m.hostsFile); err != nil {
 			return errorMsg{err}
 		}
 		return successMsg{}

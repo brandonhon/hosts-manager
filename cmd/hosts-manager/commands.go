@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/brandonhon/hosts-manager/internal/audit"
 	"github.com/brandonhon/hosts-manager/internal/backup"
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
-	"github.com/brandonhon/hosts-manager/internal/tui"
 	"github.com/brandonhon/hosts-manager/pkg/platform"
 
 	"github.com/spf13/cobra"
@@ -52,131 +53,76 @@ func backupCmd() *cobra.Command {
 }
 
 func restoreCmd() *cobra.Command {
-	var listBackups bool
-
-	cmd := &cobra.Command{
-		Use:   "restore [backup-file]",
-		Short: "Restore hosts file from backup",
+	return &cobra.Command{
+		Use:   "restore [number|file]",
+		Short: "List backups, or restore one",
+		Long: `With no argument, list backups newest first. Restore one by its number
+in that list (1 is the newest) or by file name.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			backupMgr := backup.NewManager(cfg)
+			backups, err := backupMgr.ListBackups()
+			if err != nil {
+				return err
+			}
 
-			if listBackups {
-				backups, err := backupMgr.ListBackups()
-				if err != nil {
-					return err
-				}
-
+			if len(args) == 0 {
 				if len(backups) == 0 {
 					fmt.Println("No backups found")
 					return nil
 				}
-
-				fmt.Println("Available backups:")
-				for i, backup := range backups {
-					fmt.Printf("%d. %s (%s, %s)\n",
-						i+1,
-						filepath.Base(backup.FilePath),
-						backup.Timestamp.Format("2006-01-02 15:04:05"),
-						formatSize(backup.Size))
+				for i, b := range backups {
+					fmt.Printf("%2d. %s  %s  %s\n", i+1,
+						b.Timestamp.Format("2006-01-02 15:04:05"),
+						formatSize(b.Size), filepath.Base(b.FilePath))
 				}
 				return nil
 			}
 
-			if len(args) == 0 {
-				return fmt.Errorf("backup file path required. Use --list to see available backups")
-			}
-
-			p := platform.New()
-			if err := requireHostsWriteAccess(p); err != nil {
+			if err := requireHostsWriteAccess(platform.New()); err != nil {
 				return err
 			}
 
-			userPath := args[0]
+			target := args[0]
+			if n, err := strconv.Atoi(target); err == nil {
+				if n < 1 || n > len(backups) {
+					return fmt.Errorf("no backup numbered %d; run 'restore' to list them", n)
+				}
+				target = backups[n-1].FilePath
+			}
 
-			// Validate and secure the backup path
-			backupPath, err := validateFilePath(userPath, cfg.Backup.Directory)
+			backupPath, err := validateFilePath(target, cfg.Backup.Directory)
 			if err != nil {
 				return fmt.Errorf("invalid backup path: %w", err)
 			}
 
-			return backupMgr.RestoreBackup(backupPath)
-		},
-	}
-
-	cmd.Flags().BoolVarP(&listBackups, "list", "l", false, "List available backups")
-
-	return cmd
-}
-
-func tuiCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "tui",
-		Short: "Start interactive TUI mode",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			// The TUI can save, so it needs the same privileges as every other
-			// writing command. Checking here rather than on save means a user
-			// without them is told before making edits, not after.
-			if err := requireHostsWriteAccess(p); err != nil {
+			if dryRun {
+				fmt.Printf("Dry run, not saved: Restored %s\n", filepath.Base(backupPath))
+				return nil
+			}
+			if err := backupMgr.RestoreBackup(backupPath); err != nil {
 				return err
 			}
-
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
-			return tui.Run(hostsFile, cfg, dryRun)
+			fmt.Printf("Restored %s\n", filepath.Base(backupPath))
+			return nil
 		},
 	}
-
-	return cmd
 }
 
 func configCmd() *cobra.Command {
-	var show bool
-	var edit bool
-
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "config",
-		Short: "Manage configuration",
+		Short: "Show the config file path and current settings",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if show {
-				data, err := yaml.Marshal(cfg)
-				if err != nil {
-					return err
-				}
-				fmt.Print(string(data))
-				return nil
+			data, err := yaml.Marshal(cfg)
+			if err != nil {
+				return err
 			}
-
-			if edit {
-				p := platform.New()
-				configPath := filepath.Join(p.GetConfigDir(), "config.yaml")
-				editor := cfg.General.Editor
-
-				if editor == "" {
-					editor = "nano"
-				}
-
-				// Validate editor command for security
-				if !config.IsValidEditor(editor) {
-					return fmt.Errorf("editor %q is not allowed for security reasons. Allowed editors: %s",
-						editor, strings.Join(config.AllowedEditors(), ", "))
-				}
-
-				return runCommand(editor, configPath)
-			}
-
-			return cmd.Help()
+			fmt.Printf("# %s\n%s", filepath.Join(platform.New().GetConfigDir(), "config.yaml"), data)
+			return nil
 		},
 	}
-
-	cmd.Flags().BoolVar(&show, "show", false, "Show current configuration")
-	cmd.Flags().BoolVar(&edit, "edit", false, "Edit configuration file")
-
-	return cmd
 }
 
 func exportCmd() *cobra.Command {
@@ -279,11 +225,6 @@ For security, import operations are restricted to these directories:
 Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			if err := requireHostsWriteAccess(p); err != nil {
-				return err
-			}
-
 			userPath := args[0]
 
 			// Ensure secure directories exist
@@ -336,47 +277,25 @@ Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 				return err
 			}
 
-			if merge {
-				parser := hosts.NewParser(p.GetHostsFilePath())
-				currentHosts, err := parser.Parse()
-				if err != nil {
-					return fmt.Errorf("failed to parse current hosts file: %w", err)
+			return mutate("import", func(hf *hosts.HostsFile) (string, error) {
+				if !merge {
+					// Replace everything except where it is written.
+					path := hf.FilePath
+					*hf = *importedHosts
+					hf.FilePath = path
+					return fmt.Sprintf("Imported %d categories (replaced existing entries)", len(hf.Categories)), nil
 				}
-
+				n := 0
 				for _, category := range importedHosts.Categories {
 					for _, entry := range category.Entries {
-						if err := currentHosts.AddEntry(entry); err != nil {
-							return fmt.Errorf("failed to add imported entry %s: %w", entry.IP, err)
+						if err := hf.AddEntry(entry); err != nil {
+							return "", fmt.Errorf("failed to add imported entry %s: %w", entry.IP, err)
 						}
+						n++
 					}
 				}
-				importedHosts = currentHosts
-			}
-
-			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup && !dryRun {
-				if _, err := backupMgr.CreateBackup(); err != nil {
-					return fmt.Errorf("failed to create backup: %w", err)
-				}
-				if verbose {
-					fmt.Println("Backup created successfully")
-				}
-			}
-
-			if dryRun {
-				fmt.Printf("Would import %d categories with entries\n", len(importedHosts.Categories))
-				for _, category := range importedHosts.Categories {
-					fmt.Printf("  %s: %d entries\n", category.Name, len(category.Entries))
-				}
-				return nil
-			}
-
-			if err := importedHosts.Write(p.GetHostsFilePath()); err != nil {
-				return fmt.Errorf("failed to write hosts file: %w", err)
-			}
-
-			fmt.Printf("Successfully imported %d categories\n", len(importedHosts.Categories))
-			return nil
+				return fmt.Sprintf("Merged %d imported entries", n), nil
+			})
 		},
 	}
 
@@ -386,298 +305,62 @@ Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
 	return cmd
 }
 
-func categoryCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "category",
-		Short: "Manage categories",
-	}
-
-	cmd.AddCommand(categoryListCmd())
-	cmd.AddCommand(categoryAddCmd())
-	cmd.AddCommand(categoryEnableCmd())
-	cmd.AddCommand(categoryDisableCmd())
-
-	return cmd
-}
-
-func categoryListCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all categories",
+func profileCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "profile [name]",
+		Short: "List profiles, or activate one",
+		Long: `With no argument, list profiles (* marks the active one). With a name,
+enable exactly that profile's categories and disable the rest.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
-			fmt.Println("Categories:")
-			for _, category := range hostsFile.Categories {
-				status := "✓"
-				if !category.Enabled {
-					status = "✗"
+			if len(args) == 0 {
+				names := make([]string, 0, len(cfg.Profiles))
+				for name := range cfg.Profiles {
+					names = append(names, name)
 				}
-
-				fmt.Printf("  %s %s (%d entries)", status, category.Name, len(category.Entries))
-				if category.Description != "" {
-					fmt.Printf(" - %s", category.Description)
+				sort.Strings(names)
+				for _, name := range names {
+					prof := cfg.Profiles[name]
+					mark := " "
+					if prof.Default {
+						mark = "*"
+					}
+					fmt.Printf("%s %-12s %s %v\n", mark, name, prof.Description, prof.Categories)
 				}
-				fmt.Println()
-			}
-
-			return nil
-		},
-	}
-
-	return cmd
-}
-
-func categoryAddCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "add <name> [description]",
-		Short: "Add a new category",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			if err := requireHostsWriteAccess(p); err != nil {
-				return err
-			}
-
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
-			categoryName := args[0]
-			description := ""
-			if len(args) > 1 {
-				description = args[1]
-			}
-
-			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup && !dryRun {
-				if _, err := backupMgr.CreateBackup(); err != nil {
-					return fmt.Errorf("failed to create backup: %w", err)
-				}
-				if verbose {
-					fmt.Println("Backup created successfully")
-				}
-			}
-
-			if dryRun {
-				fmt.Printf("Would add category: %s", categoryName)
-				if description != "" {
-					fmt.Printf(" - %s", description)
-				}
-				fmt.Println()
 				return nil
 			}
 
-			if err := hostsFile.AddCategory(categoryName, description); err != nil {
-				return fmt.Errorf("failed to add category: %w", err)
+			name := args[0]
+			profile, ok := cfg.Profiles[name]
+			if !ok {
+				return fmt.Errorf("profile not found: %s", name)
 			}
 
-			if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
-				return fmt.Errorf("failed to write hosts file: %w", err)
-			}
-
-			fmt.Printf("Added category: %s", categoryName)
-			if description != "" {
-				fmt.Printf(" - %s", description)
-			}
-			fmt.Println()
-			return nil
-		},
-	}
-
-	return cmd
-}
-
-func categoryEnableCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "enable <category>",
-		Short: "Enable a category and all its entries",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return toggleCategory(args[0], true)
-		},
-	}
-
-	return cmd
-}
-
-func categoryDisableCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "disable <category>",
-		Short: "Disable a category and all its entries",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return toggleCategory(args[0], false)
-		},
-	}
-
-	return cmd
-}
-
-func profileCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "profile",
-		Short: "Manage profiles",
-	}
-
-	cmd.AddCommand(profileListCmd())
-	cmd.AddCommand(profileActivateCmd())
-
-	return cmd
-}
-
-func profileListCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all profiles",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Available profiles:")
-			for name, profile := range cfg.Profiles {
-				status := " "
-				if profile.Default {
-					status = "*"
-				}
-
-				fmt.Printf("  %s %s - %s\n", status, name, profile.Description)
-				fmt.Printf("    Categories: %v\n", profile.Categories)
-			}
-
-			return nil
-		},
-	}
-
-	return cmd
-}
-
-func profileActivateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "activate <profile>",
-		Short: "Activate a profile",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			profileName := args[0]
-			profile, exists := cfg.Profiles[profileName]
-			if !exists {
-				return fmt.Errorf("profile not found: %s", profileName)
-			}
-
-			p := platform.New()
-			if err := requireHostsWriteAccess(p); err != nil {
-				return err
-			}
-
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
-			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup && !dryRun {
-				if _, err := backupMgr.CreateBackup(); err != nil {
-					return fmt.Errorf("failed to create backup: %w", err)
-				}
-				if verbose {
-					fmt.Println("Backup created successfully")
-				}
-			}
-
-			for i := range hostsFile.Categories {
-				category := &hostsFile.Categories[i]
-				enabled := false
-				for _, activeCat := range profile.Categories {
-					if category.Name == activeCat {
-						enabled = true
-						break
+			err := mutate("profile_activate", func(hf *hosts.HostsFile) (string, error) {
+				for i := range hf.Categories {
+					c := &hf.Categories[i]
+					on := slices.Contains(profile.Categories, c.Name)
+					c.Enabled = on
+					for j := range c.Entries {
+						c.Entries[j].Enabled = on
 					}
 				}
-
-				category.Enabled = enabled
-				for j := range category.Entries {
-					category.Entries[j].Enabled = enabled
-				}
+				return fmt.Sprintf("Activated profile %s %v", name, profile.Categories), nil
+			})
+			if err != nil || dryRun {
+				return err
 			}
 
-			if dryRun {
-				fmt.Printf("Would activate profile: %s\n", profileName)
-				fmt.Printf("Enabled categories: %v\n", profile.Categories)
-				return nil
+			for n, prof := range cfg.Profiles {
+				prof.Default = n == name
+				cfg.Profiles[n] = prof
 			}
-
-			if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
-				return fmt.Errorf("failed to write hosts file: %w", err)
-			}
-
-			for name, prof := range cfg.Profiles {
-				prof.Default = (name == profileName)
-				cfg.Profiles[name] = prof
-			}
-
 			if err := config.Save(cfg); err != nil {
 				return fmt.Errorf("failed to save config: %w", err)
 			}
-
-			fmt.Printf("Activated profile: %s\n", profileName)
 			return nil
 		},
 	}
-
-	return cmd
-}
-
-func toggleCategory(categoryName string, enable bool) error {
-	p := platform.New()
-	if err := requireHostsWriteAccess(p); err != nil {
-		return err
-	}
-
-	backupMgr := backup.NewManager(cfg)
-	if cfg.General.AutoBackup && !dryRun {
-		if _, err := backupMgr.CreateBackup(); err != nil {
-			return fmt.Errorf("failed to create backup: %w", err)
-		}
-		if verbose {
-			fmt.Println("Backup created successfully")
-		}
-	}
-
-	parser := hosts.NewParser(p.GetHostsFilePath())
-	hostsFile, err := parser.Parse()
-	if err != nil {
-		return fmt.Errorf("failed to parse hosts file: %w", err)
-	}
-
-	action := "disable"
-	if enable {
-		action = "enable"
-	}
-
-	if dryRun {
-		fmt.Printf("Would %s category: %s\n", action, categoryName)
-		return nil
-	}
-
-	if enable {
-		hostsFile.EnableCategory(categoryName)
-	} else {
-		hostsFile.DisableCategory(categoryName)
-	}
-
-	if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
-		return fmt.Errorf("failed to write hosts file: %w", err)
-	}
-
-	// Capitalize first letter manually (strings.Title is deprecated)
-	actionCapitalized := strings.ToUpper(action[:1]) + action[1:]
-	fmt.Printf("%sd category: %s\n", actionCapitalized, categoryName)
-	return nil
 }
 
 // validateImportedHosts runs every entry in an imported file through the same
@@ -878,62 +561,4 @@ func validateFilePath(filePath string, allowedDir string) (string, error) {
 	}
 
 	return absPath, nil
-}
-
-func runCommand(name string, args ...string) error {
-	// Additional security validation before execution
-	if strings.ContainsRune(name, 0) {
-		if logger, err := audit.NewLogger(); err == nil {
-			logger.LogSecurityViolation("command_execution", name, "null byte in command name", map[string]interface{}{
-				"command": name,
-				"args":    args,
-			})
-		}
-		return fmt.Errorf("invalid command: contains null byte")
-	}
-
-	// Validate arguments for suspicious content
-	for i, arg := range args {
-		if strings.ContainsRune(arg, 0) {
-			if logger, err := audit.NewLogger(); err == nil {
-				logger.LogSecurityViolation("command_execution", name, "null byte in command argument", map[string]interface{}{
-					"command":   name,
-					"arg_index": i,
-					"arg_value": arg,
-				})
-			}
-			return fmt.Errorf("invalid argument: contains null byte")
-		}
-	}
-
-	// Log the command execution attempt for audit trail
-	if logger, err := audit.NewLogger(); err == nil {
-		logger.LogFileOperation("editor_execution", name, true, "")
-	}
-
-	// The only caller is `config --edit`, which gates name through
-	// config.IsValidEditor first, so it resolves to one of a fixed set of
-	// editor names; args is the config file path this process computed. Nothing
-	// here goes through a shell — exec.Command takes the arguments separately —
-	// so a value like "vim; rm -rf /" would be looked up as a program with that
-	// literal name and fail, rather than being interpreted.
-	// #nosec G204 -- editor checked against an allowlist, no shell involved
-	cmd := exec.Command(name, args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-
-	// Log execution result
-	if logger, logErr := audit.NewLogger(); logErr == nil {
-		success := err == nil
-		errorMsg := ""
-		if err != nil {
-			errorMsg = err.Error()
-		}
-		logger.LogFileOperation("editor_execution_result", name, success, errorMsg)
-	}
-
-	return err
 }

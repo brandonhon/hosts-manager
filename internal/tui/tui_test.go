@@ -1117,3 +1117,18 @@ func TestSaveFileDryRunDoesNotWrite(t *testing.T) {
 		t.Errorf("expected dry-run message, got %q", m.message)
 	}
 }
+
+// Saving goes through the injected save function, which is where backup and
+// audit logging happen, rather than writing the file directly.
+func TestSaveFileUsesSaveFunc(t *testing.T) {
+	m := createTestModel()
+	var saved *hosts.HostsFile
+	m.save = func(hf *hosts.HostsFile) error { saved = hf; return nil }
+
+	if _, ok := m.saveFile()().(successMsg); !ok {
+		t.Fatal("expected successMsg")
+	}
+	if saved != m.hostsFile {
+		t.Error("save func was not called with the model's hosts file")
+	}
+}
