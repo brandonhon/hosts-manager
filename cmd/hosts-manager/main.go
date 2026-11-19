@@ -10,8 +10,8 @@ import (
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/errors"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/tui"
 	"github.com/brandonhon/hosts-manager/pkg/platform"
-	"github.com/brandonhon/hosts-manager/pkg/search"
 
 	"github.com/spf13/cobra"
 )
@@ -44,36 +44,7 @@ func main() {
 		// Continue execution as some operations might still work
 	}
 
-	rootCmd := &cobra.Command{
-		Use:   "hosts-manager",
-		Short: "Cross-platform hosts file manager",
-		Long: `hosts-manager is a cross-platform CLI tool for managing your hosts file.
-It provides a template system, backup/restore, interactive TUI mode, and more.`,
-		Version: version,
-	}
-	// Ensure proper initialization and configuration validation
-
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", cfg.General.Verbose, "Enable verbose output")
-	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", cfg.General.DryRun, "Show what would be done without making changes")
-
-	rootCmd.AddCommand(
-		addCmd(),
-		listCmd(),
-		deleteCmd(),
-		enableCmd(),
-		disableCmd(),
-		searchCmd(),
-		backupCmd(),
-		restoreCmd(),
-		tuiCmd(),
-		configCmd(),
-		exportCmd(),
-		importCmd(),
-		categoryCmd(),
-		profileCmd(),
-	)
-
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd().Execute(); err != nil {
 		// Sanitize error for user display while logging full error for debugging
 		if logger, logErr := audit.NewLogger(); logErr == nil && errors.IsSecuritySensitive(err) {
 			logger.LogSecurityViolation("command_execution", "root_command", err.Error(), nil)
@@ -85,39 +56,241 @@ It provides a template system, backup/restore, interactive TUI mode, and more.`,
 	}
 }
 
+func rootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "hosts-manager",
+		Short: "Cross-platform hosts file manager",
+		Long: `hosts-manager manages your hosts file: entries grouped into categories,
+profiles that switch categories on and off, and automatic backups.
+
+Run with no arguments for the interactive editor.`,
+		Version: version,
+		Args:    cobra.NoArgs,
+		// A failed command should print its error, not the whole usage text.
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTUI()
+		},
+	}
+
+	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", cfg.General.Verbose, "Enable verbose output")
+	cmd.PersistentFlags().BoolVar(&dryRun, "dry-run", cfg.General.DryRun, "Show what would be done without making changes")
+
+	cmd.AddCommand(
+		listCmd(),
+		addCmd(),
+		rmCmd(),
+		toggleCmd("enable", true),
+		toggleCmd("disable", false),
+		profileCmd(),
+		backupCmd(),
+		restoreCmd(),
+		importCmd(),
+		exportCmd(),
+		configCmd(),
+	)
+
+	return cmd
+}
+
+// parseHosts reads the system hosts file.
+func parseHosts() (*hosts.HostsFile, error) {
+	hf, err := hosts.NewParser(platform.New().GetHostsFilePath()).Parse()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse hosts file: %w", err)
+	}
+	return hf, nil
+}
+
+// mutate is the one path by which a command changes the hosts file: check
+// privileges, parse, apply change, then report (dry run) or save. change
+// returns a past-tense description of what it did, e.g. "Added ...".
+func mutate(op string, change func(*hosts.HostsFile) (string, error)) error {
+	if err := requireHostsWriteAccess(platform.New()); err != nil {
+		return err
+	}
+
+	hf, err := parseHosts()
+	if err != nil {
+		return err
+	}
+
+	summary, err := change(hf)
+	if err != nil {
+		return err
+	}
+
+	if dryRun {
+		fmt.Printf("Dry run, not saved: %s\n", summary)
+		return nil
+	}
+
+	if err := saveHosts(op, summary, hf); err != nil {
+		return err
+	}
+	fmt.Println(summary)
+	return nil
+}
+
+// saveHosts backs up the current hosts file (if configured), writes hf in its
+// place and records the change in the audit log. The TUI saves through it too.
+func saveHosts(op, summary string, hf *hosts.HostsFile) error {
+	if cfg.General.AutoBackup {
+		path, err := backup.NewManager(cfg).CreateBackup()
+		if err != nil {
+			return fmt.Errorf("failed to create backup: %w", err)
+		}
+		if verbose {
+			fmt.Printf("Backup created: %s\n", path)
+		}
+	}
+
+	err := hf.Write(platform.New().GetHostsFilePath())
+	if logger, logErr := audit.NewLogger(); logErr == nil {
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		}
+		logger.LogHostsOperation(op, "", []string{summary}, err == nil, msg)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to write hosts file: %w", err)
+	}
+	return nil
+}
+
+func runTUI() error {
+	// The TUI can save, so it needs the same privileges as every other
+	// writing command. Checking here rather than on save means a user
+	// without them is told before making edits, not after.
+	if err := requireHostsWriteAccess(platform.New()); err != nil {
+		return err
+	}
+
+	hf, err := parseHosts()
+	if err != nil {
+		return err
+	}
+
+	return tui.Run(hf, cfg, dryRun, func(hf *hosts.HostsFile) error {
+		return saveHosts("tui_save", "Saved from TUI", hf)
+	})
+}
+
+func listCmd() *cobra.Command {
+	var category string
+	var all bool
+
+	cmd := &cobra.Command{
+		Use:   "list [query]",
+		Short: "List entries, optionally matching a query",
+		Long: `List entries grouped by category. A query matches IPs, hostnames and
+comments (case-insensitive substring). Disabled entries are hidden unless --all.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			hf, err := parseHosts()
+			if err != nil {
+				return err
+			}
+
+			query := ""
+			if len(args) == 1 {
+				query = args[0]
+			}
+
+			found := false
+			for _, c := range hf.Categories {
+				if category != "" && c.Name != category {
+					continue
+				}
+
+				var lines []string
+				hidden := 0
+				for _, e := range c.Entries {
+					if !entryMatches(e, query) {
+						continue
+					}
+					if !e.Enabled && !all {
+						hidden++
+						continue
+					}
+					lines = append(lines, formatEntry(e))
+				}
+
+				// With a query, skip categories with no match at all.
+				if query != "" && len(lines) == 0 && hidden == 0 {
+					continue
+				}
+				found = true
+
+				status := ""
+				if !c.Enabled {
+					status = ", category disabled"
+				}
+				if hidden > 0 {
+					status += fmt.Sprintf(", %d disabled hidden (-a to show)", hidden)
+				}
+				fmt.Printf("\n[%s] %d entries%s\n", c.Name, len(c.Entries), status)
+				for _, l := range lines {
+					fmt.Println(l)
+				}
+			}
+
+			if category != "" && hf.GetCategory(category) == nil {
+				return fmt.Errorf("category not found: %s", category)
+			}
+			if !found {
+				fmt.Println("No entries found")
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&category, "category", "c", "", "Only show this category")
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "Include disabled entries")
+
+	return cmd
+}
+
+// entryMatches reports whether e's IP, a hostname or its comment contains
+// query, ignoring case. An empty query matches everything.
+func entryMatches(e hosts.Entry, query string) bool {
+	if query == "" {
+		return true
+	}
+	q := strings.ToLower(query)
+	fields := append([]string{e.IP, e.Comment}, e.Hostnames...)
+	for _, f := range fields {
+		if strings.Contains(strings.ToLower(f), q) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatEntry(e hosts.Entry) string {
+	status := "✓"
+	if !e.Enabled {
+		status = "✗"
+	}
+	line := fmt.Sprintf("  %s %-15s %s", status, e.IP, strings.Join(e.Hostnames, " "))
+	if e.Comment != "" {
+		line += "  # " + e.Comment
+	}
+	return line
+}
+
 func addCmd() *cobra.Command {
 	var category, comment string
 
 	cmd := &cobra.Command{
 		Use:   "add <ip> <hostname> [hostname...]",
-		Short: "Add a new hosts entry",
+		Short: "Add an entry (the category is created if needed)",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if category == "" {
 				category = cfg.General.DefaultCategory
 			}
-
-			p := platform.New()
-			if err := requireHostsWriteAccess(p); err != nil {
-				return err
-			}
-
-			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup && !dryRun {
-				if _, err := backupMgr.CreateBackup(); err != nil {
-					return fmt.Errorf("failed to create backup: %w", err)
-				}
-				if verbose {
-					fmt.Println("Backup created successfully")
-				}
-			}
-
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
 			entry := hosts.Entry{
 				IP:        args[0],
 				Hostnames: args[1:],
@@ -126,284 +299,86 @@ func addCmd() *cobra.Command {
 				Enabled:   true,
 			}
 
-			if err := hostsFile.AddEntry(entry); err != nil {
-				return fmt.Errorf("failed to add entry: %w", err)
-			}
-
-			if dryRun {
-				fmt.Printf("Would add: %s %s", entry.IP, entry.Hostnames)
-				if entry.Comment != "" {
-					fmt.Printf(" # %s", entry.Comment)
+			return mutate("add", func(hf *hosts.HostsFile) (string, error) {
+				if err := hf.AddEntry(entry); err != nil {
+					return "", fmt.Errorf("failed to add entry: %w", err)
 				}
-				fmt.Println()
-				return nil
-			}
-
-			if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
-				// Log failed operation
-				if logger, logErr := audit.NewLogger(); logErr == nil {
-					logger.LogHostsOperation("add", entry.IP, entry.Hostnames, false, err.Error())
-				}
-				return fmt.Errorf("failed to write hosts file: %w", err)
-			}
-
-			// Log successful operation
-			if logger, err := audit.NewLogger(); err == nil {
-				logger.LogHostsOperation("add", entry.IP, entry.Hostnames, true, "")
-			}
-
-			fmt.Printf("Added entry: %s -> %v\n", entry.IP, entry.Hostnames)
-			return nil
+				return fmt.Sprintf("Added %s -> %s [%s]", entry.IP, strings.Join(entry.Hostnames, " "), category), nil
+			})
 		},
 	}
 
 	cmd.Flags().StringVarP(&category, "category", "c", "", "Category for the entry")
-	cmd.Flags().StringVar(&comment, "comment", "", "Comment for the entry")
+	cmd.Flags().StringVarP(&comment, "comment", "m", "", "Comment for the entry")
 
 	return cmd
 }
 
-func listCmd() *cobra.Command {
-	var categoryFilter string
-	var showDisabled bool
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all hosts entries",
+func rmCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rm <hostname>",
+		Aliases: []string{"delete"},
+		Short:   "Remove a hostname",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
-			for _, category := range hostsFile.Categories {
-				if categoryFilter != "" && category.Name != categoryFilter {
-					continue
-				}
-
-				fmt.Printf("\n=== %s ===\n", category.Name)
-				if category.Description != "" {
-					fmt.Printf("Description: %s\n", category.Description)
-				}
-				fmt.Printf("Status: ")
-				if category.Enabled {
-					fmt.Println("Enabled")
-				} else {
-					fmt.Println("Disabled")
-				}
-
-				for _, entry := range category.Entries {
-					if !entry.Enabled && !showDisabled {
-						continue
-					}
-
-					status := "✓"
-					if !entry.Enabled {
-						status = "✗"
-					}
-
-					fmt.Printf("  %s %s -> %v", status, entry.IP, entry.Hostnames)
-					if entry.Comment != "" {
-						fmt.Printf(" # %s", entry.Comment)
-					}
-					fmt.Println()
-				}
-			}
-
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVarP(&categoryFilter, "category", "c", "", "Filter by category")
-	cmd.Flags().BoolVar(&showDisabled, "show-disabled", false, "Show disabled entries")
-
-	return cmd
-}
-
-func deleteCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "delete <hostname>",
-		Short: "Delete a hosts entry",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			if err := requireHostsWriteAccess(p); err != nil {
-				return err
-			}
-
-			backupMgr := backup.NewManager(cfg)
-			if cfg.General.AutoBackup && !dryRun {
-				if _, err := backupMgr.CreateBackup(); err != nil {
-					return fmt.Errorf("failed to create backup: %w", err)
-				}
-				if verbose {
-					fmt.Println("Backup created successfully")
-				}
-			}
-
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
 			hostname := args[0]
-			if dryRun {
-				fmt.Printf("Would delete hostname: %s\n", hostname)
-				return nil
-			}
-
-			if !hostsFile.RemoveEntry(hostname) {
-				return fmt.Errorf("hostname not found: %s", hostname)
-			}
-
-			if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
-				return fmt.Errorf("failed to write hosts file: %w", err)
-			}
-
-			fmt.Printf("Deleted hostname: %s\n", hostname)
-			return nil
-		},
-	}
-
-	return cmd
-}
-
-func enableCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "enable <hostname>",
-		Short: "Enable a hosts entry",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return toggleEntry(args[0], true)
-		},
-	}
-
-	return cmd
-}
-
-func disableCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "disable <hostname>",
-		Short: "Disable a hosts entry",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return toggleEntry(args[0], false)
-		},
-	}
-
-	return cmd
-}
-
-func toggleEntry(hostname string, enable bool) error {
-	p := platform.New()
-	if err := requireHostsWriteAccess(p); err != nil {
-		return err
-	}
-
-	backupMgr := backup.NewManager(cfg)
-	if cfg.General.AutoBackup && !dryRun {
-		if _, err := backupMgr.CreateBackup(); err != nil {
-			return fmt.Errorf("failed to create backup: %w", err)
-		}
-		if verbose {
-			fmt.Println("Backup created successfully")
-		}
-	}
-
-	parser := hosts.NewParser(p.GetHostsFilePath())
-	hostsFile, err := parser.Parse()
-	if err != nil {
-		return fmt.Errorf("failed to parse hosts file: %w", err)
-	}
-
-	action := "disable"
-	if enable {
-		action = "enable"
-	}
-
-	if dryRun {
-		fmt.Printf("Would %s hostname: %s\n", action, hostname)
-		return nil
-	}
-
-	var success bool
-	if enable {
-		success = hostsFile.EnableEntry(hostname)
-	} else {
-		success = hostsFile.DisableEntry(hostname)
-	}
-
-	if !success {
-		return fmt.Errorf("hostname not found: %s", hostname)
-	}
-
-	if err := hostsFile.Write(p.GetHostsFilePath()); err != nil {
-		return fmt.Errorf("failed to write hosts file: %w", err)
-	}
-
-	// Capitalize first letter manually (strings.Title is deprecated)
-	actionCapitalized := strings.ToUpper(action[:1]) + action[1:]
-	fmt.Printf("%sd hostname: %s\n", actionCapitalized, hostname)
-	return nil
-}
-
-func searchCmd() *cobra.Command {
-	var fuzzy bool
-	var caseSensitive bool
-	var categoryFilter string
-
-	cmd := &cobra.Command{
-		Use:   "search <query>",
-		Short: "Search hosts entries",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			p := platform.New()
-			parser := hosts.NewParser(p.GetHostsFilePath())
-			hostsFile, err := parser.Parse()
-			if err != nil {
-				return fmt.Errorf("failed to parse hosts file: %w", err)
-			}
-
-			searcher := search.NewSearcher(caseSensitive, fuzzy)
-			var results []search.Result
-
-			if categoryFilter != "" {
-				results = searcher.SearchByCategory(hostsFile, args[0], categoryFilter)
-			} else {
-				results = searcher.Search(hostsFile, args[0])
-			}
-
-			if len(results) == 0 {
-				fmt.Println("No entries found")
-				return nil
-			}
-
-			fmt.Printf("Found %d entries:\n\n", len(results))
-			for _, result := range results {
-				entry := result.Entry
-				status := "✓"
-				if !entry.Enabled {
-					status = "✗"
+			return mutate("delete", func(hf *hosts.HostsFile) (string, error) {
+				if !hf.RemoveEntry(hostname) {
+					return "", fmt.Errorf("hostname not found: %s", hostname)
 				}
+				return "Removed " + hostname, nil
+			})
+		},
+	}
+}
 
-				fmt.Printf("  %s [%s] %s -> %v (score: %.2f, match: %s)",
-					status, entry.Category, entry.IP, entry.Hostnames, result.Score, result.Match)
-				if entry.Comment != "" {
-					fmt.Printf(" # %s", entry.Comment)
+// toggleCmd builds enable and disable, which act on one hostname or, with
+// --category, on a whole category.
+func toggleCmd(action string, enable bool) *cobra.Command {
+	var category string
+	verb := strings.ToUpper(action[:1]) + action[1:] + "d"
+
+	cmd := &cobra.Command{
+		Use:   action + " <hostname> | " + action + " -c <category>",
+		Short: strings.ToUpper(action[:1]) + action[1:] + " a hostname or a whole category",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if category != "" {
+				if len(args) != 0 {
+					return fmt.Errorf("give a hostname or --category, not both")
 				}
-				fmt.Println()
+				return mutate(action, func(hf *hosts.HostsFile) (string, error) {
+					if hf.GetCategory(category) == nil {
+						return "", fmt.Errorf("category not found: %s", category)
+					}
+					if enable {
+						hf.EnableCategory(category)
+					} else {
+						hf.DisableCategory(category)
+					}
+					return fmt.Sprintf("%s category %s", verb, category), nil
+				})
 			}
 
-			return nil
+			if len(args) != 1 {
+				return fmt.Errorf("requires a hostname, or --category")
+			}
+			hostname := args[0]
+			return mutate(action, func(hf *hosts.HostsFile) (string, error) {
+				var ok bool
+				if enable {
+					ok = hf.EnableEntry(hostname)
+				} else {
+					ok = hf.DisableEntry(hostname)
+				}
+				if !ok {
+					return "", fmt.Errorf("hostname not found: %s", hostname)
+				}
+				return fmt.Sprintf("%s %s", verb, hostname), nil
+			})
 		},
 	}
 
-	cmd.Flags().BoolVar(&fuzzy, "fuzzy", true, "Enable fuzzy matching")
-	cmd.Flags().BoolVar(&caseSensitive, "case-sensitive", false, "Enable case-sensitive search")
-	cmd.Flags().StringVarP(&categoryFilter, "category", "c", "", "Filter by category")
+	cmd.Flags().StringVarP(&category, "category", "c", "", "Act on this whole category")
 
 	return cmd
 }
