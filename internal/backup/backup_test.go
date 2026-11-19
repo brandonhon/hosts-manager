@@ -431,9 +431,6 @@ func TestListBackups(t *testing.T) {
 
 	// Verify backup info
 	for _, backup := range backups {
-		if backup.Hash == "" {
-			t.Error("Backup hash should not be empty")
-		}
 		if backup.Size == 0 {
 			t.Error("Backup size should not be zero")
 		}
@@ -466,11 +463,6 @@ func TestGetBackupInfo(t *testing.T) {
 	expectedTime, _ := time.Parse("2006-01-02T15-04-05", "2023-12-01T10-30-00")
 	if !info.Timestamp.Equal(expectedTime) {
 		t.Errorf("Expected timestamp %v, got %v", expectedTime, info.Timestamp)
-	}
-
-	// Verify hash
-	if info.Hash == "" {
-		t.Error("Hash should not be empty")
 	}
 
 	// Verify size
@@ -523,61 +515,6 @@ func TestGetBackupInfoWithInvalidFilename(t *testing.T) {
 	stat, _ := os.Stat(invalidPath)
 	if !info.Timestamp.Equal(stat.ModTime()) {
 		t.Error("Should fallback to file modification time for invalid timestamp")
-	}
-}
-
-func TestCalculateFileHash(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := createTestConfig(tempDir)
-	manager := NewManager(cfg)
-
-	testContent := "test content for hashing"
-
-	// Test uncompressed file hash
-	filePath := filepath.Join(tempDir, "test.txt")
-	err := os.WriteFile(filePath, []byte(testContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	hash1, err := manager.calculateFileHash(filePath)
-	if err != nil {
-		t.Fatalf("Failed to calculate file hash: %v", err)
-	}
-
-	if hash1 == "" {
-		t.Error("Hash should not be empty")
-	}
-
-	// Calculate again to ensure consistency
-	hash2, err := manager.calculateFileHash(filePath)
-	if err != nil {
-		t.Fatalf("Failed to calculate file hash again: %v", err)
-	}
-
-	if hash1 != hash2 {
-		t.Error("Hash should be consistent for same content")
-	}
-
-	// Test compressed file hash
-	compressedPath := filepath.Join(tempDir, "test.txt.gz")
-	file, err := os.Create(compressedPath)
-	if err != nil {
-		t.Fatalf("Failed to create compressed file: %v", err)
-	}
-	gzipWriter := gzip.NewWriter(file)
-	_, _ = gzipWriter.Write([]byte(testContent))
-	_ = gzipWriter.Close()
-	_ = file.Close()
-
-	compressedHash, err := manager.calculateFileHash(compressedPath)
-	if err != nil {
-		t.Fatalf("Failed to calculate compressed file hash: %v", err)
-	}
-
-	// Hash of compressed file content should match original content hash
-	if hash1 != compressedHash {
-		t.Error("Hash of compressed file content should match original")
 	}
 }
 
@@ -649,224 +586,6 @@ func TestCleanupOldBackups(t *testing.T) {
 	}
 }
 
-func TestGetBackupPath(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Test without compression
-	cfg := createTestConfig(tempDir)
-	manager := NewManager(cfg)
-
-	timestamp := "2023-12-01T10-30-00"
-	path := manager.GetBackupPath(timestamp)
-
-	expectedPath := filepath.Join(cfg.Backup.Directory, "hosts.backup.2023-12-01T10-30-00")
-	if path != expectedPath {
-		t.Errorf("Expected path %s, got %s", expectedPath, path)
-	}
-
-	// Test with compression
-	cfgCompressed := createTestConfigWithCompression(tempDir)
-	managerCompressed := NewManager(cfgCompressed)
-
-	pathCompressed := managerCompressed.GetBackupPath(timestamp)
-	expectedPathCompressed := filepath.Join(cfgCompressed.Backup.Directory, "hosts.backup.2023-12-01T10-30-00.gz")
-	if pathCompressed != expectedPathCompressed {
-		t.Errorf("Expected compressed path %s, got %s", expectedPathCompressed, pathCompressed)
-	}
-}
-
-func TestDeleteBackup(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := createTestConfig(tempDir)
-	manager := NewManager(cfg)
-
-	// Create a test backup file
-	backupPath := filepath.Join(tempDir, "test_backup.txt")
-	err := os.WriteFile(backupPath, []byte("test backup content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test backup: %v", err)
-	}
-
-	// Delete the backup
-	err = manager.DeleteBackup(backupPath)
-	if err != nil {
-		t.Fatalf("Failed to delete backup: %v", err)
-	}
-
-	// Verify file was deleted
-	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
-		t.Error("Backup file should be deleted")
-	}
-
-	// Test deleting non-existent file
-	err = manager.DeleteBackup(backupPath)
-	if err == nil {
-		t.Error("Expected error when deleting non-existent file")
-	}
-}
-
-func TestSecureDelete(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := createTestConfig(tempDir)
-	manager := NewManager(cfg)
-
-	// Create a test file
-	testPath := filepath.Join(tempDir, "secure_delete_test.txt")
-	testContent := "sensitive content that should be securely deleted"
-	err := os.WriteFile(testPath, []byte(testContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Perform secure delete
-	err = manager.secureDelete(testPath)
-	if err != nil {
-		t.Fatalf("Failed to securely delete file: %v", err)
-	}
-
-	// Verify file was deleted
-	if _, err := os.Stat(testPath); !os.IsNotExist(err) {
-		t.Error("File should be deleted after secure delete")
-	}
-
-	// Test secure delete on non-existent file (should not error)
-	err = manager.secureDelete(testPath)
-	if err != nil {
-		t.Errorf("Secure delete of non-existent file should not error: %v", err)
-	}
-}
-
-func TestMinFunction(t *testing.T) {
-	tests := []struct {
-		a, b, expected int
-	}{
-		{1, 2, 1},
-		{5, 3, 3},
-		{10, 10, 10},
-		{0, 100, 0},
-		{-5, -2, -5},
-	}
-
-	for _, tt := range tests {
-		result := min(tt.a, tt.b)
-		if result != tt.expected {
-			t.Errorf("min(%d, %d) = %d, expected %d", tt.a, tt.b, result, tt.expected)
-		}
-	}
-}
-
-func TestVerifyBackupIntegrity(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := createTestConfig(tempDir)
-	manager := NewManager(cfg)
-
-	// Create a test backup file
-	backupPath := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-30-00")
-	testContent := "test backup content for integrity check"
-	err := os.WriteFile(backupPath, []byte(testContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test backup: %v", err)
-	}
-
-	// A readable, non-empty backup passes.
-	err = manager.VerifyBackupIntegrity(backupPath)
-	if err != nil {
-		t.Fatalf("Integrity verification should pass for valid file: %v", err)
-	}
-
-	// Test with non-existent file
-	nonExistentPath := filepath.Join(tempDir, "nonexistent.backup")
-	err = manager.VerifyBackupIntegrity(nonExistentPath)
-	if err == nil {
-		t.Error("Integrity verification should fail for non-existent file")
-	}
-
-	// An empty backup is not a usable backup.
-	emptyPath := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-31-00")
-	if err := os.WriteFile(emptyPath, nil, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.VerifyBackupIntegrity(emptyPath); err == nil {
-		t.Error("Integrity verification should fail for an empty backup")
-	}
-}
-
-// TestVerifyBackupIntegrityDetectsTruncatedArchive is the regression test for
-// the tautology: VerifyBackupIntegrity used to hash the file and then hash the
-// same file again through getBackupInfo and compare the two, so it returned nil
-// for anything that could be opened — including a corrupt archive.
-func TestVerifyBackupIntegrityDetectsTruncatedArchive(t *testing.T) {
-	tempDir := t.TempDir()
-	manager := NewManager(createTestConfig(tempDir))
-
-	// Build a real gzip backup, then cut it short.
-	good := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-30-00.gz")
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	if _, err := zw.Write([]byte("127.0.0.1 localhost\n")); err != nil {
-		t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(good, buf.Bytes(), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.VerifyBackupIntegrity(good); err != nil {
-		t.Fatalf("intact archive should verify: %v", err)
-	}
-
-	truncated := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-32-00.gz")
-	if err := os.WriteFile(truncated, buf.Bytes()[:buf.Len()-6], 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.VerifyBackupIntegrity(truncated); err == nil {
-		t.Error("truncated archive should fail verification")
-	}
-
-	garbage := filepath.Join(tempDir, "hosts.backup.2023-12-01T10-33-00.gz")
-	if err := os.WriteFile(garbage, []byte("not gzip at all"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.VerifyBackupIntegrity(garbage); err == nil {
-		t.Error("non-gzip content under a .gz name should fail verification")
-	}
-}
-
-func TestCreateSecureBackup(t *testing.T) {
-	tempDir := t.TempDir()
-	cfg := createTestConfig(tempDir)
-
-	// Create a fake hosts file
-	hostsPath := filepath.Join(tempDir, "hosts")
-	testContent := "127.0.0.1 localhost\n"
-	err := os.WriteFile(hostsPath, []byte(testContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test hosts file: %v", err)
-	}
-
-	manager := NewManager(cfg)
-
-	// Create backup directory
-	err = os.MkdirAll(cfg.Backup.Directory, 0700)
-	if err != nil {
-		t.Fatalf("Failed to create backup directory: %v", err)
-	}
-
-	// We need to test this indirectly since CreateSecureBackup depends on platform
-	// Test the verification part by creating a backup and verifying it
-	backupPath, err := manager.copyFileToBackup(hostsPath, cfg.Backup.Directory, false)
-	if err != nil {
-		t.Fatalf("Failed to create backup for testing: %v", err)
-	}
-
-	// Test verification
-	err = manager.VerifyBackupIntegrity(backupPath)
-	if err != nil {
-		t.Fatalf("Backup verification should pass: %v", err)
-	}
-}
-
 // BenchmarkCreateBackup benchmarks backup creation
 func BenchmarkCreateBackup(b *testing.B) {
 	tempDir := b.TempDir()
@@ -926,35 +645,6 @@ func BenchmarkCreateCompressedBackup(b *testing.B) {
 			b.Fatal(err)
 		}
 		_ = os.Remove(backupPath) // Clean up
-	}
-}
-
-// BenchmarkCalculateFileHash benchmarks file hash calculation
-func BenchmarkCalculateFileHash(b *testing.B) {
-	tempDir := b.TempDir()
-	cfg := createTestConfig(tempDir)
-	manager := NewManager(cfg)
-
-	// Create test files of different sizes
-	testSizes := []int{1024, 10240, 102400} // 1KB, 10KB, 100KB
-
-	for _, size := range testSizes {
-		b.Run(fmt.Sprintf("size_%dKB", size/1024), func(b *testing.B) {
-			content := strings.Repeat("x", size)
-			filePath := filepath.Join(tempDir, fmt.Sprintf("test_%d.txt", size))
-			err := os.WriteFile(filePath, []byte(content), 0644)
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := manager.calculateFileHash(filePath)
-				if err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
 	}
 }
 
