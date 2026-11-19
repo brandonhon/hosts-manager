@@ -8,7 +8,6 @@ import (
 	"github.com/brandonhon/hosts-manager/internal/audit"
 	"github.com/brandonhon/hosts-manager/internal/backup"
 	"github.com/brandonhon/hosts-manager/internal/config"
-	"github.com/brandonhon/hosts-manager/internal/errors"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
 	"github.com/brandonhon/hosts-manager/internal/tui"
 	"github.com/brandonhon/hosts-manager/pkg/platform"
@@ -45,13 +44,7 @@ func main() {
 	}
 
 	if err := rootCmd().Execute(); err != nil {
-		// Sanitize error for user display while logging full error for debugging
-		if logger, logErr := audit.NewLogger(); logErr == nil && errors.IsSecuritySensitive(err) {
-			logger.LogSecurityViolation("command_execution", "root_command", err.Error(), nil)
-		}
-
-		sanitizedErr := errors.SanitizeError(err)
-		fmt.Fprintf(os.Stderr, "Error: %v\n", sanitizedErr)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -68,6 +61,8 @@ Run with no arguments for the interactive editor.`,
 		Args:    cobra.NoArgs,
 		// A failed command should print its error, not the whole usage text.
 		SilenceUsage: true,
+		// main prints the error; letting cobra print it too doubled it.
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTUI()
 		},
