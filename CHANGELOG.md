@@ -1,8 +1,10 @@
 # Changelog
 
 **This file stops at 0.7.0.** The `[Unreleased]` section below is the curated summary of
-everything since 0.6.1 and becomes 0.7.0. Releases after that get notes generated from the
-commit history on the [releases page](https://github.com/brandonhon/hosts-manager/releases).
+everything since 0.6.1; rename it to `## [0.7.0] - <date>` before tagging and the release
+workflow publishes it as the 0.7.0 release notes. Releases after that get notes generated
+from the commit history on the [releases page](https://github.com/brandonhon/hosts-manager/releases),
+unless a `## [X.Y.Z]` section is added here for them.
 
 ## [Unreleased]
 
