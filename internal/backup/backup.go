@@ -41,7 +41,7 @@ func (m *Manager) CreateBackup() (string, error) {
 	}
 
 	backupDir := m.config.Backup.Directory
-	if err := os.MkdirAll(backupDir, 0700); err != nil {
+	if err := platform.MkdirAllForUser(backupDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -56,6 +56,9 @@ func (m *Manager) CreateBackup() (string, error) {
 
 	if err := m.copyFile(hostsPath, backupPath, m.config.Backup.CompressionType == "gzip"); err != nil {
 		return "", fmt.Errorf("failed to create backup: %w", err)
+	}
+	if err := platform.GiveToInvokingUser(backupPath); err != nil {
+		return "", fmt.Errorf("failed to set backup owner: %w", err)
 	}
 
 	_ = m.cleanupOldBackups()

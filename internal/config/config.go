@@ -134,7 +134,7 @@ func Save(config *Config) error {
 	p := platform.New()
 	configDir := p.GetConfigDir()
 
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := platform.MkdirAllForUser(configDir, 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -146,6 +146,9 @@ func Save(config *Config) error {
 
 	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	if err := platform.GiveToInvokingUser(configPath); err != nil {
+		return fmt.Errorf("failed to set config file owner: %w", err)
 	}
 
 	return nil
