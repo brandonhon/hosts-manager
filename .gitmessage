@@ -1,26 +1,15 @@
-# <type>[optional scope]: <description>
+# <scope>: <description>
 #
-# [optional body]
+# [optional body: what changed and why, wrapped at 72]
 #
-# [optional footer(s)]
+# Scope is the area changed, e.g. tui, cli, hosts, backup, config, audit,
+# platform, docs, ci, build, release. Separate several with commas
+# (build,ci: ...), or use treewide for changes across the whole tree.
 #
-# Types:
-# feat:     A new feature
-# fix:      A bug fix
-# docs:     Documentation only changes
-# style:    Changes that do not affect the meaning of the code
-# refactor: A code change that neither fixes a bug nor adds a feature
-# perf:     A code change that improves performance
-# test:     Adding missing tests or correcting existing tests
-# build:    Changes that affect the build system or external dependencies
-# ci:       Changes to our CI configuration files and scripts
-# chore:    Other changes that don't modify src or test files
-# revert:   Reverts a previous commit
+# Release notes are generated from commit subjects, so write the subject
+# as a user-readable summary of the change.
 #
 # Examples:
-# feat: add ability to parse IPv6 addresses
-# fix(parser): handle edge case with malformed entries
-# docs: update README with new installation instructions
-# feat!: remove deprecated backup format (BREAKING CHANGE)
-#
-# Breaking changes: add ! after type or add BREAKING CHANGE: in footer
+# hosts: read back category names that contain hyphens
+# cli: print a command's help when it is used wrongly
+# build,ci,release: replace the pipeline with GoReleaser

@@ -75,7 +75,7 @@ sudo hosts-manager add 10.0.0.5 api.dev web.dev -c dev -m "dev box"
 sudo hosts-manager add 0.0.0.0 ads.example.com -c blocked       # block a host
 sudo hosts-manager disable myapp.local                          # comment it out, keep it
 sudo hosts-manager enable myapp.local
-sudo hosts-manager rm myapp.local
+sudo hosts-manager rm myapp.local                               # the line goes when it has no other hostnames
 ```
 
 A category is created the first time you add to it; its name may use letters,
