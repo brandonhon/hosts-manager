@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brandonhon/hosts-manager/internal/audit"
 	"github.com/brandonhon/hosts-manager/internal/backup"
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
@@ -133,14 +132,7 @@ func exportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export hosts entries",
-		Long: `Export hosts file to different format (json, yaml, hosts).
-
-For security, export operations are restricted to these directories:
-• ~/.local/share/hosts-manager/ (data directory)
-• ~/.config/hosts-manager/ (config directory)
-• /tmp/hosts-manager/ (temporary directory)
-
-Use relative paths (e.g., 'my-export.json') or paths within these directories.`,
+		Long:  `Export entries as json, yaml or hosts format, to stdout or a file (-o).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := platform.New()
 			parser := hosts.NewParser(p.GetHostsFilePath())
@@ -179,22 +171,10 @@ Use relative paths (e.g., 'my-export.json') or paths within these directories.`,
 			if output == "" {
 				fmt.Print(string(data))
 			} else {
-				// Ensure secure directories exist
-				if err := ensureSecureDirectories(); err != nil {
-					return fmt.Errorf("failed to initialize secure directories: %w", err)
-				}
-
-				// Validate output path using secure directory restrictions
-				allowedDirs := getAllowedDirectories()
-				outputPath, err := validateFilePathStrict(output, allowedDirs, "export")
-				if err != nil {
-					return fmt.Errorf("export path validation failed: %w", err)
-				}
-
-				if err := os.WriteFile(outputPath, data, 0600); err != nil {
+				if err := os.WriteFile(output, data, 0600); err != nil {
 					return err
 				}
-				fmt.Printf("Exported to: %s\n", outputPath)
+				fmt.Printf("Exported to: %s\n", output)
 			}
 
 			return nil
@@ -215,34 +195,14 @@ func importCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import <file>",
 		Short: "Import hosts entries from file",
-		Long: `Import hosts entries from a file (json or yaml format).
-
-For security, import operations are restricted to these directories:
-• ~/.local/share/hosts-manager/ (data directory)
-• ~/.config/hosts-manager/ (config directory)
-• /tmp/hosts-manager/ (temporary directory)
-
-Use relative paths (e.g., 'my-import.json') or paths within these directories.`,
+		Long: `Import entries from a json or yaml file (as written by export). Replaces
+all entries unless --merge. Every entry is validated before anything is written.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			userPath := args[0]
-
-			// Ensure secure directories exist
-			if err := ensureSecureDirectories(); err != nil {
-				return fmt.Errorf("failed to initialize secure directories: %w", err)
-			}
-
-			// Validate import file path using secure directory restrictions
-			allowedDirs := getAllowedDirectories()
-			filePath, err := validateFilePathStrict(userPath, allowedDirs, "import")
-			if err != nil {
-				return fmt.Errorf("import path validation failed: %w", err)
-			}
-
-			// filePath comes from validateFilePathStrict above, which resolves it
-			// and requires it to sit inside one of getAllowedDirectories().
-			// #nosec G304 -- path validated against an allowlist before this point
-			data, err := os.ReadFile(filePath)
+			// Reading a file the user named is the point of import, and its
+			// contents are validated before anything reaches the hosts file.
+			// #nosec G304 -- user-chosen input file, contents validated below
+			data, err := os.ReadFile(args[0])
 			if err != nil {
 				return fmt.Errorf("failed to read import file: %w", err)
 			}
@@ -444,77 +404,6 @@ func formatSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
-}
-
-// getAllowedDirectories returns the list of directories where file operations are permitted
-func getAllowedDirectories() []string {
-	p := platform.New()
-	return []string{
-		p.GetDataDir(),   // User data directory (e.g., ~/.local/share/hosts-manager)
-		p.GetConfigDir(), // User config directory (e.g., ~/.config/hosts-manager)
-		filepath.Join(os.TempDir(), "hosts-manager"), // Secure temp directory
-		// Note: backup directory is handled separately in cfg.Backup.Directory
-	}
-}
-
-// ensureSecureDirectories creates the allowed directories with proper permissions
-func ensureSecureDirectories() error {
-	dirs := getAllowedDirectories()
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return fmt.Errorf("failed to create secure directory %s: %w", dir, err)
-		}
-	}
-	return nil
-}
-
-// validateFilePathStrict validates file paths with mandatory directory restrictions
-func validateFilePathStrict(filePath string, allowedDirs []string, operation string) (string, error) {
-	if len(allowedDirs) == 0 {
-		return "", fmt.Errorf("no allowed directories specified for %s operation", operation)
-	}
-
-	// Log security-sensitive path validation attempts
-	if logger, err := audit.NewLogger(); err == nil {
-		logger.LogFileOperation(operation+"_path_validation", filePath, true, "")
-	}
-
-	// Clean the path to resolve any ".." or similar elements
-	cleanPath := filepath.Clean(filePath)
-
-	// Additional security checks first
-	if strings.Contains(cleanPath, "\x00") {
-		if logger, err := audit.NewLogger(); err == nil {
-			logger.LogSecurityViolation("path_validation", filePath, "null byte detected in path", map[string]interface{}{
-				"operation": operation,
-				"path":      filePath,
-			})
-		}
-		return "", fmt.Errorf("invalid path: contains null byte")
-	}
-
-	// Try to validate against each allowed directory
-	var validationErrors []string
-	for _, allowedDir := range allowedDirs {
-		if validatedPath, err := validateFilePath(cleanPath, allowedDir); err == nil {
-			return validatedPath, nil
-		} else {
-			validationErrors = append(validationErrors, fmt.Sprintf("%s: %v", allowedDir, err))
-		}
-	}
-
-	// If no allowed directory worked, this is a security violation
-	if logger, err := audit.NewLogger(); err == nil {
-		logger.LogSecurityViolation("path_validation", filePath, "path not in allowed directories", map[string]interface{}{
-			"operation":         operation,
-			"path":              filePath,
-			"allowed_dirs":      allowedDirs,
-			"validation_errors": validationErrors,
-		})
-	}
-
-	return "", fmt.Errorf("%s operation denied: path '%s' is not within allowed directories: %v",
-		operation, filePath, allowedDirs)
 }
 
 // validateFilePath validates that a file path is safe and prevents path traversal attacks
