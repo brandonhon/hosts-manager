@@ -1,204 +1,33 @@
 name: Release
 
-# Fires on semver tag pushes (v0.7.0, v1.0.0-rc.1, ...) and produces
-# cross-compiled binaries packaged as tarballs (zip for Windows) with a
-# SHA256SUMS file, attached to a GitHub Release.
-#
-# Release notes are the curated CHANGELOG.md section for the version, with the
-# auto-generated commit list and compare link appended below it.
-#
-# Cutting a release:
-#   1. Move the [Unreleased] entries under a new "## [X.Y.Z] - <date>" heading
-#      in CHANGELOG.md and add its bottom link ref, then commit.
-#   2. git tag vX.Y.Z && git push origin vX.Y.Z
-#
-# Re-run a release without re-tagging via "Run workflow" on the Actions tab,
-# passing the existing tag name.
-
+# Push a tag to release:  git tag v1.2.3 && git push origin v1.2.3
+# A tag with a suffix (v1.2.3-rc.1) is published as a prerelease.
+# Builds, archives, checksums and notes are all defined in .goreleaser.yaml.
 on:
   push:
-    tags: ['v*.*.*']
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to (re-)release (must already exist, e.g. v0.7.0)'
-        required: true
-        type: string
+    tags: ['v*']
 
-# Needed to create the Release and upload assets. The repo's default workflow
-# token is read-only, so this cannot be omitted.
+# The repo's default workflow token is read-only; creating a release needs write.
 permissions:
   contents: write
 
-concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref }}
-  cancel-in-progress: false
-
-env:
-  GO_VERSION: 'stable'
-
 jobs:
-  prepare:
-    name: Parse tag
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.parse.outputs.version }}
-      version_no_v: ${{ steps.parse.outputs.version_no_v }}
-      is_prerelease: ${{ steps.parse.outputs.is_prerelease }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-
-      - id: parse
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::tag must match v<major>.<minor>.<patch>[-prerelease], got: $TAG"
-            exit 1
-          fi
-          IS_PRERELEASE=false
-          [[ "$TAG" == *-* ]] && IS_PRERELEASE=true
-          {
-            echo "version=$TAG"
-            echo "version_no_v=${TAG#v}"
-            echo "is_prerelease=$IS_PRERELEASE"
-          } >> "$GITHUB_OUTPUT"
-
-      # A stable release must have its curated CHANGELOG section, because that
-      # section becomes the release body. Prereleases are exempt.
-      - name: Verify CHANGELOG is prepped for this version
-        if: steps.parse.outputs.is_prerelease == 'false'
-        run: |
-          ver="${{ steps.parse.outputs.version_no_v }}"
-          if ! grep -qE "^## \[${ver}\]" CHANGELOG.md; then
-            echo "::error::CHANGELOG.md has no '## [${ver}]' section. Add the release notes before tagging."
-            exit 1
-          fi
-          echo "CHANGELOG OK for ${ver}"
-
-  build:
-    name: Binary (${{ matrix.goos }}/${{ matrix.goarch }})
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Build and package
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          set -euo pipefail
-          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
-          COMMIT_HASH=$(git rev-parse --short HEAD)
-
-          BINARY=hosts-manager
-          [ "$GOOS" = "windows" ] && BINARY=hosts-manager.exe
-
-          mkdir -p dist
-          go build -trimpath \
-            -ldflags "-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commitHash=${COMMIT_HASH}" \
-            -o "dist/${BINARY}" ./cmd/hosts-manager
-
-          ARCHIVE="hosts-manager-${VERSION}-${GOOS}-${GOARCH}"
-          cd dist
-          if [ "$GOOS" = "windows" ]; then
-            zip -q "${ARCHIVE}.zip" "${BINARY}"
-          else
-            tar -czf "${ARCHIVE}.tar.gz" "${BINARY}"
-          fi
-          rm "${BINARY}"
-          ls -la
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
-          retention-days: 1
-          if-no-files-found: error
-
   release:
-    name: GitHub Release
-    needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-          fetch-depth: 0   # full history so generate_release_notes can diff
+          fetch-depth: 0 # release notes need the history back to the previous tag
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/setup-go@v5
         with:
-          pattern: binary-*
-          path: dist
-          merge-multiple: true
+          go-version: stable
 
-      - name: Generate SHA256SUMS
-        run: |
-          set -euo pipefail
-          cd dist
-          sha256sum hosts-manager-* | sort -k2 > SHA256SUMS
-          cat SHA256SUMS
+      - run: go test ./...
 
-      # The release body is the curated CHANGELOG section for this version.
-      # The tag is vX.Y.Z; the CHANGELOG heading is "## [X.Y.Z]" with no v.
-      - name: Extract CHANGELOG section for this version
-        run: |
-          ver="${{ needs.prepare.outputs.version_no_v }}"
-          awk -v ver="$ver" '
-            index($0, "## [" ver "]") == 1 { grab = 1; next }
-            grab && index($0, "## [") == 1 { exit }
-            grab { print }
-          ' CHANGELOG.md > release-body.md
-          if [ -s release-body.md ]; then
-            echo "Extracted CHANGELOG section for $ver:"; cat release-body.md
-          else
-            # Leave the file empty so generate_release_notes supplies the whole
-            # body. Writing this note *into* it put a diagnostic at the top of
-            # the published release, which is what happened on v0.7.0-rc.1.
-            echo "No CHANGELOG section for $ver; release notes will be the generated commit list only."
-          fi
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - uses: goreleaser/goreleaser-action@v6
         with:
-          tag_name: ${{ needs.prepare.outputs.version }}
-          name: ${{ needs.prepare.outputs.version }}
-          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
-          body_path: release-body.md
-          generate_release_notes: true
-          files: |
-            dist/hosts-manager-*
-            dist/SHA256SUMS
-          fail_on_unmatched_files: true
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

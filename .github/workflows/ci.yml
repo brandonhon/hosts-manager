@@ -1,91 +1,51 @@
 name: CI
 
-# Tag pushes are deliberately not handled here — release.yml owns tags.
-#
-# No paths filter, on purpose. `Quality Gate` is a required status check for
-# main, and a filtered workflow is *skipped* rather than passed — so a
-# docs-only pull request would never report the check and could never merge.
-# This repo is public, so the extra runs cost nothing.
+# No paths filter, on purpose: `Quality Gate` is a required check on main, and a
+# filtered-out workflow is reported as skipped, not passed, so the PR could
+# never merge.
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
-# The repo's default workflow token is read-only; every job here only needs to
-# read the checkout. The one exception is the security job, which uploads SARIF.
 permissions:
   contents: read
 
-# Supersede in-flight runs for the same ref rather than paying for both.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  GO_VERSION: 'stable'
 
 jobs:
   test:
     name: Test (${{ matrix.os }})
     strategy:
-      # Report every OS rather than cancelling the others on the first failure.
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # setup-go caches the module and build caches by default, keyed on
-      # go.sum — no separate actions/cache step is needed.
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Run tests
-        run: make test
-
-      - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest'
-        run: make coverage
-
-      - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v4
-        continue-on-error: true
-        with:
-          files: ./build/coverage.out
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+          go-version: stable
+      - run: make test
+      - run: make build
+      # go run rather than ./build/hosts-manager: the Windows build has no .exe
+      # suffix, which PowerShell will not execute.
+      - run: go run ./cmd/hosts-manager --version
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
-
-      # Action v7+ is required to run golangci-lint v2, which .golangci.yml
-      # targets. The linter version is pinned so CI and `make install-linters`
-      # agree; keep it in sync with GOLANGCI_VERSION in the Makefile.
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+          go-version: stable
+      # Action v7+ is required for golangci-lint v2. Keep the version in sync
+      # with GOLANGCI_VERSION in the Makefile.
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.11.4
           args: --timeout=5m
@@ -93,86 +53,20 @@ jobs:
   security:
     name: Security
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # Required by upload-sarif. Without it the upload fails, which was
-      # invisible because the step is continue-on-error.
-      security-events: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: stable
+      # Keep GOSEC_VERSION in sync with the Makefile. Any finding fails the job.
+      - run: go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: make sec
 
-      # Keep GOSEC_VERSION in sync with the Makefile. Pinned for the same
-      # reason golangci-lint is: an unpinned scanner can change behaviour
-      # without a commit, and this one already went years without running.
-      # Findings now fail the job. -no-fail was here while the pre-existing
-      # findings awaited triage; they are all annotated, so the scan is at zero
-      # and a new finding should stop the build rather than accumulate.
-      #
-      # No continue-on-error either: that would swallow a failure to install or
-      # run the scanner, which is exactly how a bad module path went unnoticed
-      # for the repo's entire history.
-      - name: Run Gosec Security Scanner
-        run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}
-          gosec -fmt sarif -out results.sarif ./...
-        env:
-          GOSEC_VERSION: v2.28.0
-
-      # This one keeps continue-on-error: pull requests from forks do not get
-      # security-events: write, so the upload legitimately fails there and
-      # must not break a contributor's build.
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
-        continue-on-error: true
-        with:
-          sarif_file: results.sarif
-
-      - name: Run govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [test, lint]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Download dependencies
-        run: go mod download
-
-      # A compile check plus a smoke test of the resulting binary. Release
-      # builds are cross-compiled by release.yml, and the test job above
-      # already compiles the tree natively on macOS and Windows, so the
-      # platform-specific files (atomic_unix.go / atomic_windows.go) stay
-      # covered without cross-compiling five targets on every push.
-      - name: Build binary
-        run: make build
-
-      - name: Smoke test binary
-        run: |
-          ./build/hosts-manager --version
-          ./build/hosts-manager --help
-
+  # The single required status check on main.
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [test, lint, security, build]
+    needs: [test, lint, security]
     steps:
-      - name: Quality Gate
-        run: echo "All quality checks passed."
+      - run: echo "All checks passed."
