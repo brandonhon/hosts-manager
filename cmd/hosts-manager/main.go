@@ -10,8 +10,8 @@ import (
 	"github.com/brandonhon/hosts-manager/internal/backup"
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/platform"
 	"github.com/brandonhon/hosts-manager/internal/tui"
-	"github.com/brandonhon/hosts-manager/pkg/platform"
 
 	"github.com/spf13/cobra"
 )
