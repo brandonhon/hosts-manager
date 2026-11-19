@@ -29,7 +29,7 @@ use `--dry-run`, which needs no privileges and writes nothing.
 ## Layout
 
 ```
-cmd/hosts-manager/   commands; every change goes through mutate() in main.go
+cmd/hosts-manager/   commands; every write, CLI or editor, goes through saveHosts() in main.go
 internal/hosts/      parsing, writing (atomic) and validating the hosts file
 internal/tui/        the interactive editor
 internal/backup/     backups and restore
@@ -46,7 +46,8 @@ internal/platform/   OS paths, privilege checks, sudo ownership
   that fails without it.
 - If a change alters behavior a user can see, update README.md in the same PR.
 - Commit subjects become the release notes, so make them read well on their
-  own.
+  own. They take the form `<scope>: <description>`; `.gitmessage` has
+  examples (`git config commit.template .gitmessage` to use it).
 
 ## Releases
 

@@ -87,7 +87,9 @@ func rootCmd() *cobra.Command {
 		Long: `hosts-manager manages your hosts file: entries grouped into categories,
 profiles that switch categories on and off, and automatic backups.
 
-Run with no arguments for the interactive editor.`,
+Run with no arguments for the interactive editor. Commands that change the
+hosts file, and the editor, need sudo (an Administrator terminal on Windows);
+--dry-run shows what they would do without it.`,
 		Version: version,
 		Args:    cobra.NoArgs,
 		// main prints errors, and the help only for usage errors; cobra would
