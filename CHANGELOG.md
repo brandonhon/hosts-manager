@@ -120,110 +120,110 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
 
 ### 🐛 Bug Fixes
 
-* update module path to github.com/brandonhon/hosts-manager ([0e5313f](https://github.com/brandonhon/hosts-manager/commit/0e5313facf5c4fe35541c2e953b6f4ecce70fbd1))
+* update module path to github.com/brandonhon/hosts-manager ([4394802](https://github.com/brandonhon/hosts-manager/commit/439480201dd2ac59d4b822192de34b16b016be24))
 
 ## [0.6.0](https://github.com/brandonhon/hosts-manager/compare/v0.5.2...v0.6.0) (2025-10-02)
 
 ### 🚀 Features
 
-* add CLI category creation and TUI entry editing ([839582d](https://github.com/brandonhon/hosts-manager/commit/839582db90d847cb43a5205bcad71cd8e9643b1b))
+* add CLI category creation and TUI entry editing ([a068eff](https://github.com/brandonhon/hosts-manager/commit/a068eff1f9f6a9994bd488f79da0fbc744706a39))
 
 ### 🐛 Bug Fixes
 
-* resolve CLI test failures and update TUI controls display ([a24bfe3](https://github.com/brandonhon/hosts-manager/commit/a24bfe3471053ebd1175d08c905ad47a3370c743))
-* resolve root user test failures and enhance TUI controls display ([67646ab](https://github.com/brandonhon/hosts-manager/commit/67646aba36d37cf5c69425767ec90c2b714a3a4f))
-* skip flaky concurrent test on Windows CI ([2edf98a](https://github.com/brandonhon/hosts-manager/commit/2edf98ac5f8f274d4a24ec8ae4c6051691c76848))
+* resolve CLI test failures and update TUI controls display ([595abed](https://github.com/brandonhon/hosts-manager/commit/595abed5e0e50fdb72ef74bb65a1219d66f8c01c))
+* resolve root user test failures and enhance TUI controls display ([47d1ae9](https://github.com/brandonhon/hosts-manager/commit/47d1ae95fcaca6aba054d2345f56039ac783374c))
+* skip flaky concurrent test on Windows CI ([87abebf](https://github.com/brandonhon/hosts-manager/commit/87abebfe7c9ccfb8d7bd5d3ab53859ec14413b5d))
 
 ## [0.5.2](https://github.com/brandonhon/hosts-manager/compare/v0.5.1...v0.5.2) (2025-10-01)
 
 ### 📚 Documentation
 
-* improve version variable documentation in main.go ([ef6c4b8](https://github.com/brandonhon/hosts-manager/commit/ef6c4b827bf1726ea686e2b361c26fc508002005))
+* improve version variable documentation in main.go ([d727d6e](https://github.com/brandonhon/hosts-manager/commit/d727d6e2a51974b2d53bdb392931a55f2ea8dcae))
 
 ## [0.5.1](https://github.com/brandonhon/hosts-manager/compare/v0.5.0...v0.5.1) (2025-10-01)
 
 ### 📚 Documentation
 
-* add Global Flags section documenting --version flag ([a1bad31](https://github.com/brandonhon/hosts-manager/commit/a1bad31be577721c8d223b7b51f0cdfe76828e6a))
+* add Global Flags section documenting --version flag ([7248126](https://github.com/brandonhon/hosts-manager/commit/724812605bd22a2c8dbb09019f86363e574e4362))
 
 ## [0.5.0](https://github.com/brandonhon/hosts-manager/compare/v0.4.7...v0.5.0) (2025-10-01)
 
 ### 🚀 Features
 
-* add --version flag to CLI ([467d6e7](https://github.com/brandonhon/hosts-manager/commit/467d6e7b74b2b67b9748fa34686fc0aff2216c6f))
+* add --version flag to CLI ([9995799](https://github.com/brandonhon/hosts-manager/commit/99957994cce18e56ba14ccb345fc585b69f69274))
 
 ## [0.4.7](https://github.com/brandonhon/hosts-manager/compare/v0.4.6...v0.4.7) (2025-10-01)
 
 ### 🐛 Bug Fixes
 
-* add ProgramData path validation for Windows config directory test ([0f8b92e](https://github.com/brandonhon/hosts-manager/commit/0f8b92efe7c5a44f7afa7bd5e789efb6e545f7e2))
+* add ProgramData path validation for Windows config directory test ([5c2441d](https://github.com/brandonhon/hosts-manager/commit/5c2441dbc45faad8bf88b07c803b802900da2629))
 
 ## [0.4.6](https://github.com/brandonhon/hosts-manager/compare/v0.4.5...v0.4.6) (2025-09-30)
 
 ### 🐛 Bug Fixes
 
-* resolve goimports formatting issues ([0b3990f](https://github.com/brandonhon/hosts-manager/commit/0b3990f5071456ca0c17013539d843c58e2f518d))
+* resolve goimports formatting issues ([9d619cc](https://github.com/brandonhon/hosts-manager/commit/9d619cc806961761a27ffac9a6a89025b6398b94))
 
 ## [0.4.5](https://github.com/brandonhon/hosts-manager/compare/v0.4.4...v0.4.5) (2025-09-30)
 
 ### 🐛 Bug Fixes
 
-* remove deprecated service section from golangci-lint config ([c58266f](https://github.com/brandonhon/hosts-manager/commit/c58266f8c945ee05e68026dfb451a3d11550b16c))
+* remove deprecated service section from golangci-lint config ([0fcd533](https://github.com/brandonhon/hosts-manager/commit/0fcd5339f7bb538f616028cff8fb2d7729e9eb1d))
 
 ## [0.4.4](https://github.com/brandonhon/hosts-manager/compare/v0.4.3...v0.4.4) (2025-09-30)
 
 ### 🐛 Bug Fixes
 
-* pin golangci-lint version for consistent CI behavior ([d78d640](https://github.com/brandonhon/hosts-manager/commit/d78d6408f1255575cb5a2f49e70cb9e34a73b9f3))
-* resolve CI failures with golangci-lint version and Windows tests ([070d6fb](https://github.com/brandonhon/hosts-manager/commit/070d6fbe7da45daf2995a67cd7353261e99485bd))
+* pin golangci-lint version for consistent CI behavior ([3b55585](https://github.com/brandonhon/hosts-manager/commit/3b555859448fdfa423cab00490ab16cf9fbf9a26))
+* resolve CI failures with golangci-lint version and Windows tests ([8e60ae1](https://github.com/brandonhon/hosts-manager/commit/8e60ae19328b7f66b4a707ec7ddf8447565a597a))
 
 ## [0.4.3](https://github.com/brandonhon/hosts-manager/compare/v0.4.2...v0.4.3) (2025-09-30)
 
 ### 🐛 Bug Fixes
 
-* resolve Go formatting issues and add golangci-lint version spec ([8661cd5](https://github.com/brandonhon/hosts-manager/commit/8661cd535d924b8fe93f6e228bbcff75b7930a4e))
+* resolve Go formatting issues and add golangci-lint version spec ([6b6c600](https://github.com/brandonhon/hosts-manager/commit/6b6c60024d336142a5c0264e809a6347605bad23))
 
 ## [0.4.2](https://github.com/brandonhon/hosts-manager/compare/v0.4.1...v0.4.2) (2025-09-30)
 
 ### 🐛 Bug Fixes
 
-* apply De Morgan's law to improve code clarity in TUI validation ([54d13f7](https://github.com/brandonhon/hosts-manager/commit/54d13f7aa072c0de00d740ed3dc35980a4cb5081))
+* apply De Morgan's law to improve code clarity in TUI validation ([d14c9e0](https://github.com/brandonhon/hosts-manager/commit/d14c9e02a4957e6d443d7474253be894883a1a9f))
 
 ## [0.4.1](https://github.com/brandonhon/hosts-manager/compare/v0.4.0...v0.4.1) (2025-09-30)
 
 ### 🐛 Bug Fixes
 
-* update CI status badge and add configuration validation comment ([6db55c9](https://github.com/brandonhon/hosts-manager/commit/6db55c925cb0d1d5b2918b8e6b41e76558dd290b))
+* update CI status badge and add configuration validation comment ([f69ce3b](https://github.com/brandonhon/hosts-manager/commit/f69ce3bc45b09e6323ad9569728d1d0249d3c564))
 
 ## [0.4.0](https://github.com/brandonhon/hosts-manager/compare/v0.3.2...v0.4.0) (2025-09-30)
 
 ### 🚀 Features
 
-* optimize CI workflows to run only on Go code changes ([8d66fb1](https://github.com/brandonhon/hosts-manager/commit/8d66fb1e369a2d441870719a647d3bf1837019fa))
+* optimize CI workflows to run only on Go code changes ([0c44734](https://github.com/brandonhon/hosts-manager/commit/0c447342994085b2edc41e7e1774e1d426e67297))
 
 ## [0.3.2](https://github.com/brandonhon/hosts-manager/compare/v0.3.1...v0.3.2) (2025-09-30)
 
 ### 📚 Documentation
 
-* fix README security rating and clarify release process ([f3cefab](https://github.com/brandonhon/hosts-manager/commit/f3cefab4d6c9acf6dd08a75c30f476392e2645be))
+* fix README security rating and clarify release process ([9c1bf22](https://github.com/brandonhon/hosts-manager/commit/9c1bf228a2e8787dff4d967035a3dafd8edb5943))
 
 ## [0.3.1](https://github.com/brandonhon/hosts-manager/compare/v0.3.0...v0.3.1) (2025-09-30)
 
 ### 📚 Documentation
 
-* update EXAMPLES.md and developer notes with new TUI features ([e73edfe](https://github.com/brandonhon/hosts-manager/commit/e73edfe9aaddab20148684f941c3c38492a4fe68))
+* update EXAMPLES.md and developer notes with new TUI features ([151d70a](https://github.com/brandonhon/hosts-manager/commit/151d70a9b195d1761a2face940ffd915f71279eb))
 
 ## [0.3.0](https://github.com/brandonhon/hosts-manager/compare/v0.2.0...v0.3.0) (2025-09-30)
 
 ### 🚀 Features
 
-* optimize release assets to reduce total count ([a350f86](https://github.com/brandonhon/hosts-manager/commit/a350f861aa6c804543311e7450268decdf65a2d5))
+* optimize release assets to reduce total count ([da2d69a](https://github.com/brandonhon/hosts-manager/commit/da2d69a0e22e371c34cccd121c5e95c4747e2c0b))
 
 ## [0.2.0](https://github.com/brandonhon/hosts-manager/compare/v0.1.9...v0.2.0) (2025-09-30)
 
 ### 🚀 Features
 
-* reset to development versioning and enhance TUI features ([26c53ac](https://github.com/brandonhon/hosts-manager/commit/26c53acf7c45020a96cc8a4d1df1b4c811e42039))
+* reset to development versioning and enhance TUI features ([afa49e3](https://github.com/brandonhon/hosts-manager/commit/afa49e3e4acf6f97400f30bc4546fc105bd28b20))
 
 ## Development Release Notes
 
