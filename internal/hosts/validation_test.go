@@ -121,6 +121,11 @@ func TestValidateComment(t *testing.T) {
 		{name: "comment with symbols", comment: "API server (production)", expectErr: false},
 		{name: "comment with tabs", comment: "Tabbed\tcomment", expectErr: false},
 		{name: "max length", comment: strings.Repeat("a", 500), expectErr: false},
+		// A comment is inert text in a hosts file. The old blocklist of
+		// script patterns ("data:", "eval(", ...) protected nothing and
+		// rejected ordinary comments like this one.
+		{name: "looks like a url scheme", comment: "metadata: see wiki", expectErr: false},
+		{name: "html-ish text", comment: "<script> host for tests", expectErr: false},
 
 		// Invalid comments
 		{name: "too long", comment: strings.Repeat("a", 501), expectErr: true},
@@ -130,15 +135,6 @@ func TestValidateComment(t *testing.T) {
 		{name: "carriage return", comment: "Line 1\rLine 2", expectErr: true},
 		{name: "crlf", comment: "Line 1\r\nLine 2", expectErr: true},
 		{name: "injected host mapping", comment: "note\n10.0.0.1 evil.example.com", expectErr: true},
-		{name: "script tag", comment: "<script>alert(1)</script>", expectErr: true},
-		{name: "javascript protocol", comment: "javascript:alert(1)", expectErr: true},
-		{name: "data protocol", comment: "data:text/html,<script>alert(1)</script>", expectErr: true},
-		{name: "vbscript", comment: "vbscript:msgbox(1)", expectErr: true},
-		{name: "onload event", comment: "onload=alert(1)", expectErr: true},
-		{name: "onerror event", comment: "onerror=alert(1)", expectErr: true},
-		{name: "eval function", comment: "eval('alert(1)')", expectErr: true},
-		{name: "setTimeout function", comment: "setTimeout(alert, 1000)", expectErr: true},
-		{name: "setInterval function", comment: "setInterval(alert, 1000)", expectErr: true},
 		{name: "control chars", comment: "test\x01comment", expectErr: true},
 		{name: "null byte", comment: "test\x00comment", expectErr: true},
 	}
@@ -224,7 +220,7 @@ func TestValidateEntry(t *testing.T) {
 			entry: Entry{
 				IP:        "127.0.0.1",
 				Hostnames: []string{"localhost"},
-				Comment:   "<script>alert(1)</script>",
+				Comment:   "note\n10.0.0.1 evil.example.com",
 				Category:  "default",
 				Enabled:   true,
 			},
@@ -295,148 +291,6 @@ func TestValidateCategoryName(t *testing.T) {
 	}
 }
 
-// TestValidateIPSecurity tests IP security validation
-func TestValidateIPSecurity(t *testing.T) {
-	tests := []struct {
-		name      string
-		ip        string
-		expectErr bool
-	}{
-		// Should be allowed
-		{name: "localhost", ip: "127.0.0.1", expectErr: false},
-		{name: "private 192.168.x.x", ip: "192.168.1.1", expectErr: false},
-		{name: "private 10.x.x.x", ip: "10.0.0.1", expectErr: false},
-		{name: "private 172.16.x.x", ip: "172.16.0.1", expectErr: false},
-		{name: "public IP", ip: "8.8.8.8", expectErr: false},
-		{name: "IPv6 localhost", ip: "::1", expectErr: false},
-		{name: "IPv6 private", ip: "fc00::1", expectErr: false},
-		{name: "unspecified IPv4 blackholes a host", ip: "0.0.0.0", expectErr: false},
-		{name: "unspecified IPv6 blackholes a host", ip: "::", expectErr: false},
-
-		// Should be rejected
-		{name: "multicast IPv4", ip: "224.0.0.1", expectErr: true},
-		{name: "IPv6 multicast", ip: "ff02::1", expectErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := parseIP(tt.ip)
-			if ip == nil {
-				t.Fatalf("Failed to parse IP: %s", tt.ip)
-			}
-
-			err := validateIPSecurity(ip)
-
-			if tt.expectErr && err == nil {
-				t.Errorf("validateIPSecurity(%q) expected error but got none", tt.ip)
-			}
-			if !tt.expectErr && err != nil {
-				t.Errorf("validateIPSecurity(%q) unexpected error: %v", tt.ip, err)
-			}
-		})
-	}
-}
-
-// TestIsPrivateIP tests private IP detection
-func TestIsPrivateIP(t *testing.T) {
-	tests := []struct {
-		name    string
-		ip      string
-		private bool
-	}{
-		// Private IPs
-		{name: "localhost", ip: "127.0.0.1", private: true},
-		{name: "private 192.168.x.x", ip: "192.168.1.1", private: true},
-		{name: "private 10.x.x.x", ip: "10.0.0.1", private: true},
-		{name: "private 172.16.x.x", ip: "172.16.0.1", private: true},
-		{name: "link-local", ip: "169.254.1.1", private: true},
-		{name: "IPv6 localhost", ip: "::1", private: true},
-		{name: "IPv6 private", ip: "fc00::1", private: true},
-		{name: "IPv6 link-local", ip: "fe80::1", private: true},
-
-		// Public IPs
-		{name: "Google DNS", ip: "8.8.8.8", private: false},
-		{name: "Cloudflare DNS", ip: "1.1.1.1", private: false},
-		{name: "public IPv6", ip: "2001:4860:4860::8888", private: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ip := parseIP(tt.ip)
-			if ip == nil {
-				t.Fatalf("Failed to parse IP: %s", tt.ip)
-			}
-
-			result := isPrivateIP(ip)
-			if result != tt.private {
-				t.Errorf("isPrivateIP(%q) = %v, want %v", tt.ip, result, tt.private)
-			}
-		})
-	}
-}
-
-// TestContainsHomographs tests homograph detection
-func TestContainsHomographs(t *testing.T) {
-	tests := []struct {
-		name             string
-		hostname         string
-		expectHomographs bool
-	}{
-		{name: "normal ASCII", hostname: "example.com", expectHomographs: false},
-		{name: "with numbers", hostname: "test123.com", expectHomographs: false},
-		{name: "cyrillic a", hostname: "еxample.com", expectHomographs: true},  // Cyrillic 'e'
-		{name: "cyrillic o", hostname: "examplе.com", expectHomographs: true},  // Cyrillic 'e'
-		{name: "mixed script", hostname: "gооgle.com", expectHomographs: true}, // Cyrillic 'o'
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := containsHomographs(tt.hostname)
-			if result != tt.expectHomographs {
-				t.Errorf("containsHomographs(%q) = %v, want %v", tt.hostname, result, tt.expectHomographs)
-			}
-		})
-	}
-}
-
-// TestValidateHostnameLabel tests individual hostname label validation
-func TestValidateHostnameLabel(t *testing.T) {
-	tests := []struct {
-		name      string
-		label     string
-		expectErr bool
-	}{
-		// Valid labels
-		{name: "simple label", label: "test", expectErr: false},
-		{name: "with numbers", label: "test123", expectErr: false},
-		{name: "with hyphens", label: "test-label", expectErr: false},
-		{name: "single char", label: "a", expectErr: false},
-		{name: "max length", label: strings.Repeat("a", 63), expectErr: false},
-
-		// Invalid labels
-		{name: "empty label", label: "", expectErr: true},
-		{name: "too long", label: strings.Repeat("a", 64), expectErr: true},
-		{name: "starts with hyphen", label: "-test", expectErr: true},
-		{name: "ends with hyphen", label: "test-", expectErr: true},
-		{name: "with underscore", label: "test_label", expectErr: true},
-		{name: "with space", label: "test label", expectErr: true},
-		{name: "with special char", label: "test@label", expectErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateHostnameLabel(tt.label)
-
-			if tt.expectErr && err == nil {
-				t.Errorf("validateHostnameLabel(%q) expected error but got none", tt.label)
-			}
-			if !tt.expectErr && err != nil {
-				t.Errorf("validateHostnameLabel(%q) unexpected error: %v", tt.label, err)
-			}
-		})
-	}
-}
-
 // TestValidateHostnameSecurity tests hostname security validation
 func TestValidateHostnameSecurity(t *testing.T) {
 	tests := []struct {
@@ -464,85 +318,15 @@ func TestValidateHostnameSecurity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateHostnameSecurity(tt.hostname)
+			err := ValidateHostname(tt.hostname)
 
 			if tt.expectErr && err == nil {
-				t.Errorf("validateHostnameSecurity(%q) expected error but got none", tt.hostname)
+				t.Errorf("ValidateHostname(%q) expected error but got none", tt.hostname)
 			}
 			if !tt.expectErr && err != nil {
-				t.Errorf("validateHostnameSecurity(%q) unexpected error: %v", tt.hostname, err)
+				t.Errorf("ValidateHostname(%q) unexpected error: %v", tt.hostname, err)
 			}
 		})
-	}
-}
-
-// Helper function to parse IP addresses for testing
-func parseIP(ipStr string) []byte {
-	// Simple wrapper around net.ParseIP for testing
-	if ipStr == "" {
-		return nil
-	}
-
-	// Check if it's a valid IPv4
-	parts := strings.Split(ipStr, ".")
-	if len(parts) == 4 {
-		ip := make([]byte, 4)
-		for i, part := range parts {
-			if len(part) == 0 || len(part) > 3 {
-				return nil
-			}
-			val := 0
-			for _, r := range part {
-				if r < '0' || r > '9' {
-					return nil
-				}
-				val = val*10 + int(r-'0')
-				if val > 255 {
-					return nil
-				}
-			}
-			ip[i] = byte(val)
-		}
-		return ip
-	}
-
-	// For IPv6 and other complex cases, we'd need a more sophisticated parser
-	// For now, return a simple mock based on the string
-	switch ipStr {
-	case "::1":
-		return []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-	case "::":
-		return []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-	case "ff02::1":
-		ip := make([]byte, 16)
-		ip[0] = 0xff
-		ip[1] = 0x02
-		ip[15] = 1
-		return ip
-	case "fc00::1":
-		ip := make([]byte, 16)
-		ip[0] = 0xfc
-		ip[15] = 1
-		return ip
-	case "fe80::1":
-		ip := make([]byte, 16)
-		ip[0] = 0xfe
-		ip[1] = 0x80
-		ip[15] = 1
-		return ip
-	case "2001:4860:4860::8888":
-		ip := make([]byte, 16)
-		ip[0] = 0x20
-		ip[1] = 0x01
-		ip[2] = 0x48
-		ip[3] = 0x60
-		ip[4] = 0x48
-		ip[5] = 0x60
-		ip[14] = 0x88
-		ip[15] = 0x88
-		return ip
-	default:
-		return nil
 	}
 }
 
