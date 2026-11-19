@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -197,4 +198,59 @@ func (p *Platform) GetDataDir() string {
 	default:
 		return p.GetConfigDir()
 	}
+}
+
+// GiveToInvokingUser hands path to the user who ran sudo, so the config,
+// backups and audit log the tool keeps in their home stay readable by them
+// rather than becoming root-owned. It does nothing unless running as root
+// under sudo, and only touches paths inside that user's home directory.
+func GiveToInvokingUser(path string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	name := os.Getenv("SUDO_USER")
+	if name == "" {
+		return nil
+	}
+	u, err := user.Lookup(name)
+	if err != nil || u.HomeDir == "" {
+		return nil
+	}
+	if rel, err := filepath.Rel(u.HomeDir, path); err != nil || strings.HasPrefix(rel, "..") {
+		return nil
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return nil
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return nil
+	}
+	return os.Lchown(path, uid, gid)
+}
+
+// MkdirAllForUser is os.MkdirAll, then GiveToInvokingUser on each directory
+// it had to create. Existing directories are left as they are.
+func MkdirAllForUser(dir string, perm os.FileMode) error {
+	var created []string
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		if _, err := os.Stat(d); err == nil {
+			break
+		}
+		created = append(created, d)
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+
+	if err := os.MkdirAll(dir, perm); err != nil {
+		return err
+	}
+	for _, d := range created {
+		if err := GiveToInvokingUser(d); err != nil {
+			return err
+		}
+	}
+	return nil
 }

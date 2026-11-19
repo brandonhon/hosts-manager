@@ -369,3 +369,18 @@ func TestXDGHonoredOnAllUnixPlatforms(t *testing.T) {
 		}
 	})
 }
+
+// Without sudo there is nobody to hand files to: both helpers must leave
+// ownership alone and MkdirAllForUser must still create the tree.
+func TestOwnershipHelpersWithoutSudo(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("covered by TestOwnershipHelpersUnderSudo when running as root")
+	}
+	dir := filepath.Join(t.TempDir(), "a", "b")
+	if err := MkdirAllForUser(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := GiveToInvokingUser(dir); err != nil {
+		t.Fatal(err)
+	}
+}

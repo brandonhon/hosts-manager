@@ -174,6 +174,9 @@ func exportCmd() *cobra.Command {
 				if err := os.WriteFile(output, data, 0600); err != nil {
 					return err
 				}
+				if err := platform.GiveToInvokingUser(output); err != nil {
+					return err
+				}
 				fmt.Printf("Exported to: %s\n", output)
 			}
 

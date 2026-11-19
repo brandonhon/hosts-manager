@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/brandonhon/hosts-manager/internal/platform"
 )
 
 // maxSize is the size at which the log is moved aside to changes.log.1,
@@ -20,7 +22,7 @@ const maxSize = 1 << 20
 //
 // The user is the one who ran sudo, when sudo was used.
 func Record(dir, op, summary string, opErr error) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := platform.MkdirAllForUser(dir, 0700); err != nil {
 		return err
 	}
 	path := filepath.Join(dir, "changes.log")
@@ -47,7 +49,10 @@ func Record(dir, op, summary string, opErr error) error {
 		_ = f.Close()
 		return err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return platform.GiveToInvokingUser(path)
 }
 
 func user() string {
