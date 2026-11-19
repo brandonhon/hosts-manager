@@ -14,6 +14,7 @@ import (
 type model struct {
 	hostsFile    *hosts.HostsFile
 	config       *config.Config
+	dryRun       bool // save reports instead of writing
 	currentView  view
 	cursor       int
 	selected     map[int]bool
@@ -185,10 +186,11 @@ func controlsView() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, row1, row2, row3)
 }
 
-func Run(hostsFile *hosts.HostsFile, cfg *config.Config) error {
+func Run(hostsFile *hosts.HostsFile, cfg *config.Config, dryRun bool) error {
 	m := model{
 		hostsFile:   hostsFile,
 		config:      cfg,
+		dryRun:      dryRun,
 		currentView: viewMain,
 		selected:    make(map[int]bool),
 		entries:     buildEntryList(hostsFile),
@@ -258,6 +260,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case successMsg:
 		m.message = "File saved successfully!"
+		return m, nil
+
+	case dryRunMsg:
+		m.message = "Dry run: changes not saved"
 		return m, nil
 	}
 
@@ -892,6 +898,10 @@ func (m *model) filterEntries() {
 
 func (m *model) saveFile() tea.Cmd {
 	return func() tea.Msg {
+		// A dry run skips the privilege check, so it must not write either.
+		if m.dryRun {
+			return dryRunMsg{}
+		}
 		if err := m.hostsFile.Write(m.hostsFile.FilePath); err != nil {
 			return errorMsg{err}
 		}
@@ -901,6 +911,7 @@ func (m *model) saveFile() tea.Cmd {
 
 type errorMsg struct{ err error }
 type successMsg struct{}
+type dryRunMsg struct{}
 
 func (m *model) View() string {
 	switch m.currentView {
