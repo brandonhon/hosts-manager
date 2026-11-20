@@ -121,7 +121,8 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
 
 - The `Dockerfile`, which ran the tool as root in a container against a bind-mounted
   `/etc/hosts`.
-- `INSTALL.md` and `EXAMPLES.md`; their content is in the README.
+- `INSTALL.md` and `EXAMPLES.md`. The README is now a short overview, with full
+  documentation in `docs/install.md`, `docs/usage.md` and `docs/configuration.md`.
 
 ## [0.6.1](https://github.com/brandonhon/hosts-manager/releases/tag/v0.6.1) (2025-10-02)
 
