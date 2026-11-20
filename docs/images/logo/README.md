@@ -17,6 +17,8 @@ off, and the `#` is how it switches them off.
 | `favicon.ico` | Browser tab icon for older browsers: 16, 32 and 48 px in one file. |
 | `favicon-16.png`, `favicon-32.png` | The tab icon as PNGs. |
 | `apple-touch-icon.png` | 180 px home-screen icon. Square and opaque, because iOS rounds the corners itself. |
+| `social-preview.png` | 1280×640 image GitHub shows when the repository is shared. Uploaded by hand under Settings → General → Social preview. |
+| `social-preview.html` | Source for `social-preview.png`, with the command that renders it. |
 
 The SVGs are the source; the PNGs and the `.ico` were rendered from them.
 

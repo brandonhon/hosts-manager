@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  Source for social-preview.png, the 1280x640 image GitHub shows when the
+  repository is shared. To regenerate it:
+
+    google-chrome --headless=new --hide-scrollbars --window-size=1280,640 \
+      --virtual-time-budget=5000 --screenshot=social-preview.png social-preview.html
+
+  then upload it under Settings > General > Social preview.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hosts-manager social preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=JetBrains+Mono:wght@400;600&family=Martian+Mono:wght@700&display=swap">
+<style>
+  :root {
+    --bg: #0f141b; --panel: #151c25; --rule: #263140;
+    --fg: #e6ebf2; --muted: #93a0b2; --dim: #66758a;
+    --blue: #4aa8ff; --green: #5fd16b;
+  }
+  html, body { margin: 0; }
+  body {
+    width: 1280px; height: 640px; overflow: hidden; box-sizing: border-box;
+    background: var(--bg); color: var(--fg);
+    font-family: "Instrument Sans", system-ui, sans-serif;
+    display: grid; grid-template-columns: 1fr 470px; gap: 56px; align-items: center;
+    padding: 0 80px;
+  }
+  .brand { display: flex; align-items: center; gap: 20px; margin-bottom: 40px; }
+  .brand img { width: 88px; height: 88px; }
+  .brand span { font: 700 40px/1 "Martian Mono", monospace; letter-spacing: -.03em; }
+  h1 { margin: 0 0 24px; font: 700 52px/1.12 "Martian Mono", monospace; letter-spacing: -.04em; }
+  h1 .hash { color: var(--dim); }
+  p { margin: 0 0 36px; font-size: 26px; line-height: 1.45; color: var(--muted); max-width: 31ch; hyphens: none; }
+  .meta { font: 500 19px/1 "JetBrains Mono", monospace; color: var(--dim); display: flex; flex-wrap: wrap; gap: 14px 22px; }
+  .meta .url { flex-basis: 100%; white-space: nowrap; }
+  .meta b { color: var(--fg); font-weight: 600; }
+
+  .file { background: var(--panel); border: 1px solid var(--rule); border-radius: 18px; padding: 26px 0; font: 19px/1.75 "JetBrains Mono", monospace; }
+  .file .path { padding: 0 28px 14px; margin-bottom: 14px; border-bottom: 1px solid var(--rule); color: var(--muted); font-size: 17px; }
+  .line { display: grid; grid-template-columns: 30px 150px 1fr; padding: 0 28px; white-space: nowrap; }
+  .line .d { color: var(--green); }
+  .line.off, .line.off .d { color: var(--dim); }
+  .cat { padding: 0 28px; color: var(--blue); }
+  .gap { height: 14px; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="brand"><img src="hosts-manager-icon.svg" alt=""><span>hosts-manager</span></div>
+    <h1>Your hosts file,<br><span class="hash">#</span> in order.</h1>
+    <p>Categories you switch on and off, profiles, a backup before every change, and an interactive editor.</p>
+    <div class="meta"><b>Linux</b><b>macOS</b><b>Windows</b><span class="url">brandonhon.github.io/hosts-manager</span></div>
+  </div>
+  <div class="file" aria-hidden="true">
+    <div class="path">/etc/hosts</div>
+    <div class="cat"># @category dev</div>
+    <div class="line"><span class="d">●</span><span>127.0.0.1</span><span>app.test</span></div>
+    <div class="line"><span class="d">●</span><span>10.0.0.5</span><span>api.dev.test</span></div>
+    <div class="line off"><span class="d">○</span><span># 10.0.0.7</span><span>queue.dev.test</span></div>
+    <div class="gap"></div>
+    <div class="cat"># @category blocked</div>
+    <div class="line"><span class="d">●</span><span>0.0.0.0</span><span>ads.example.com</span></div>
+    <div class="line"><span class="d">●</span><span>0.0.0.0</span><span>tracker.example.net</span></div>
+  </div>
+</body>
+</html>
