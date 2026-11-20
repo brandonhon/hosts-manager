@@ -705,7 +705,10 @@ func TestRuntimeErrorsDoNotShowHelp(t *testing.T) {
 // offers the no-privilege alternatives; other errors pass through unchanged.
 func TestEditorAccessError(t *testing.T) {
 	err := editorAccessError(fmt.Errorf("wrapped: %w", platform.ErrNotElevated), "hosts-manager")
-	for _, want := range []string{"interactive editor", "hosts-manager --dry-run", "hosts-manager --help"} {
+	if n := strings.Count(err.Error(), "\n") + 1; n > 2 {
+		t.Errorf("editor error is %d lines, want at most 2:\n%s", n, err)
+	}
+	for _, want := range []string{"interactive editor", "hosts-manager --dry-run"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("editor error missing %q:\n%s", want, err)
 		}
@@ -731,5 +734,34 @@ func TestCommandPrivilegeErrorIsNotTheEditorMessage(t *testing.T) {
 	})
 	if !errors.Is(err, platform.ErrNotElevated) || strings.Contains(err.Error(), "interactive editor") {
 		t.Errorf("mutate error = %v", err)
+	}
+}
+
+// With no command, -v (which is --verbose, though often read as --version) and
+// any flag other than --dry-run print the full help instead of opening the
+// editor.
+func TestBareRootFlagsShowHelp(t *testing.T) {
+	cfg = config.DefaultConfig()
+	for _, args := range [][]string{{"-v"}, {"--verbose"}, {"-v", "--dry-run"}} {
+		root := rootCmd()
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Errorf("%v: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "Available Commands:") {
+			t.Errorf("%v: want the full help, got:\n%s", args, out.String())
+		}
+		verbose, dryRun = false, false
+	}
+
+	for _, args := range [][]string{{}, {"--dry-run"}} {
+		root := rootCmd()
+		_ = root.ParseFlags(args)
+		if !opensEditor(root) {
+			t.Errorf("%v should open the editor", args)
+		}
+		dryRun = false
 	}
 }
