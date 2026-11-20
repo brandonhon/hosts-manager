@@ -95,8 +95,8 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
   - Only `add` wrote to the audit log.
   - Commands without arguments, such as `backup`, silently ignored any they were given.
   - "Run with sudo" hints name the binary by full path. `sudo hosts-manager` fails with
-    "command not found" wherever sudo's `secure_path` omits `/usr/local/bin`, as on RHEL
-    and Fedora.
+    "command not found" wherever sudo's `secure_path` omits `/usr/local/bin`, as it does by
+    default on RHEL, Fedora, Kali and current Debian testing/unstable.
   - `hosts-manager -v` (or any flag other than `--dry-run`, with no command) prints the full
     help. `-v` is `--verbose`, and on its own it used to open the editor, so without sudo it
     failed with a "modify hosts file" error. Opening the editor without privileges now says

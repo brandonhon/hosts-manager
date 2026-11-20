@@ -90,9 +90,8 @@ func (p *Platform) elevationRequiredError() error {
 // ElevatedCommand describes how to run this program with args, elevated.
 //
 // It names the binary by absolute path rather than as typed. sudo does not
-// search the caller's PATH but its own secure_path, which on many systems
-// (RHEL, Fedora, and any machine where it has been narrowed) omits
-// /usr/local/bin - so "sudo hosts-manager" fails with "command not found"
+// search the caller's PATH but its own secure_path, which by default on RHEL,
+// Fedora, Kali and current Debian testing/unstable omits /usr/local/bin - so "sudo hosts-manager" fails with "command not found"
 // even though "hosts-manager" works.
 func ElevatedCommand(args []string) string {
 	exe, err := os.Executable()
