@@ -1,3 +1,5 @@
+<img src="docs/images/logo/hosts-manager-icon.svg" alt="hosts-manager logo: a # whose top bar is an on/off switch" width="96" height="96">
+
 # hosts-manager
 
 [![Release](https://img.shields.io/github/v/release/brandonhon/hosts-manager)](https://github.com/brandonhon/hosts-manager/releases)
