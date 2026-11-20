@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>hosts-manager: your hosts file, in order</title>
+<meta name="description" content="Manage your hosts file from the terminal on Linux, macOS and Windows: categories you can switch on and off, profiles, automatic backups, and an interactive editor.">
+<meta name="theme-color" content="#1d74c4">
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="hosts-manager">
+<meta property="og:description" content="Your hosts file, in order. Categories, profiles, backups and an interactive editor, on Linux, macOS and Windows.">
+<meta property="og:url" content="https://brandonhon.github.io/hosts-manager/">
+<meta property="og:image" content="https://brandonhon.github.io/hosts-manager/hosts-manager-icon-512.png">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Martian+Mono:wght@500;700&display=swap">
+<style>
+html { -webkit-text-size-adjust: 100%; }
+html, body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* Layout: the hero is the product. A live two-pane editor sits beside the
+   /etc/hosts it writes; everything else is short, quiet supporting copy. */
+:root {
+  --bg: #f5f7fa;          /* cool paper, tinted toward the accent */
+  --surface: #ffffff;
+  --fg: #141922;
+  --muted: #5a6474;
+  --rule: #dde2ea;
+  --accent: #1d74c4;      /* the editor's focus blue */
+  --accent-soft: #e3effa;
+  --on: #2c9447;          /* enabled entry */
+  --warn: #b77400;        /* unsaved */
+  --term-bg: #0f141b;     /* terminals stay dark in both themes */
+  --term-panel: #141a22;
+  --term-fg: #d6dce5;
+  --term-dim: #6c7787;
+  --term-sel: #26303c;
+  --term-rule: #2a3340;
+  --term-accent: #4aa8ff;
+  --term-on: #63d16f;
+  --term-warn: #f2b84b;
+  --term-err: #ff7b72;
+  --font-display: "Martian Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1015; --surface: #141920; --fg: #e5e9f0; --muted: #8b95a6; --rule: #252c37;
+    --accent: #4aa8ff; --accent-soft: #15283b; --on: #63d16f; --warn: #f2b84b;
+    --term-bg: #090c10; --term-panel: #0e1218;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1015; --surface: #141920; --fg: #e5e9f0; --muted: #8b95a6; --rule: #252c37;
+  --accent: #4aa8ff; --accent-soft: #15283b; --on: #63d16f; --warn: #f2b84b;
+  --term-bg: #090c10; --term-panel: #0e1218;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, kbd { font-family: var(--font-code); font-size: .9em; }
+
+/* nav */
+nav { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; padding-block: 20px; }
+.brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; color: var(--fg); text-decoration: none;
+  font: 700 15px/1 var(--font-display); letter-spacing: -.01em; }
+.brand img { width: 28px; height: 28px; flex: none; }
+nav .links { margin-left: auto; display: flex; gap: 20px; flex-wrap: wrap; font-size: 15px; }
+nav .links a { color: var(--muted); text-decoration: none; }
+nav .links a:hover { color: var(--fg); }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 32px 28px; max-width: 760px; }
+.eyebrow { font: 500 13px/1.4 var(--font-code); color: var(--muted); letter-spacing: .02em; }
+.eyebrow b { color: var(--fg); font-weight: 600; }
+h1 { margin: 0; font: 700 clamp(30px, 5vw, 52px)/1.08 var(--font-display); letter-spacing: -.035em; text-wrap: balance; }
+h1 .off { color: var(--muted); }
+.lede { margin: 0; font-size: 18px; color: var(--muted); max-width: 60ch; text-wrap: pretty; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px;
+  font: 600 15px/1 var(--font-body); text-decoration: none; border: 1px solid var(--rule); color: var(--fg); background: var(--surface); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #071422; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #071422; } }
+.meta { font: 13px/1.4 var(--font-code); color: var(--muted); }
+
+/* demo */
+.demo { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .demo { grid-template-columns: minmax(0, 1fr); } }
+.demo-hint { margin: 0 0 12px; font-size: 14px; line-height: 1.9; color: var(--muted); max-width: 90ch; }
+.demo-hint strong { color: var(--fg); font-weight: 600; }
+kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 5px;
+  background: var(--surface); color: var(--fg); font-size: 12px; line-height: 1.5; }
+
+.ed { background: var(--term-bg); color: var(--term-fg); border-radius: 12px; font: 13.5px/1.55 var(--font-code);
+  display: flex; flex-direction: column; min-height: 300px; overflow: hidden; box-shadow: 0 1px 0 var(--rule), 0 18px 40px -24px rgba(10, 20, 40, .45); }
+.ed:focus { outline: none; }
+.ed:focus-visible, .ed.focused { box-shadow: 0 0 0 2px var(--accent), 0 18px 40px -24px rgba(10, 20, 40, .45); }
+.ed-top { display: flex; gap: 12px; align-items: baseline; padding: 10px 14px 6px; white-space: nowrap; overflow: hidden; }
+.ed-top .name { color: var(--term-accent); font-weight: 600; }
+.ed-top .path { color: var(--term-dim); }
+.ed-top .right { margin-left: auto; color: var(--term-fg); }
+.ed-top .unsaved { color: var(--term-warn); margin-left: 12px; }
+.ed-body { flex: 1; display: grid; grid-template-columns: 13.5em minmax(0, 1fr); gap: 8px; padding: 0 10px; min-height: 0; }
+.pane { border: 1px solid var(--term-rule); border-radius: 8px; padding: 6px 0; min-width: 0; }
+.pane.active { border-color: var(--term-accent); }
+.row { display: grid; align-items: center; cursor: pointer; padding: 0 10px; min-height: 1.6em; }
+.row:hover { background: rgba(255, 255, 255, .03); }
+.row.sel { background: var(--term-sel); }
+.cat { grid-template-columns: 1.4em minmax(0, 1fr) auto; gap: 4px; }
+.cat .count { color: var(--term-dim); font-variant-numeric: tabular-nums; }
+.dot { width: 1.4em; text-align: left; color: var(--term-dim); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.dot.on { color: var(--term-on); }
+.ttl { padding: 0 10px 4px; font-weight: 600; }
+.ent { grid-template-columns: 1em 1.4em 9.5em minmax(0, 1fr) auto; gap: 2px; }
+.ent .ptr { color: var(--term-accent); }
+.ent .host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ent .cmt { color: var(--term-dim); padding-left: 1em; white-space: nowrap; }
+.ent.off .ip, .ent.off .host { color: var(--term-dim); }
+.ent.flash { animation: flash .9s ease-out; }
+@keyframes flash { from { background: rgba(74, 168, 255, .22); } to { background: transparent; } }
+.ed-keys { padding: 8px 14px 10px; color: var(--term-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-keys b { color: var(--term-fg); font-weight: 600; }
+.ed-keys.msg { color: var(--term-on); }
+.ed-keys.msg.err { color: var(--term-err); }
+@media (max-width: 640px) {
+  .ed { font-size: 12.5px; }
+  .ed-body { grid-template-columns: minmax(0, 1fr); }
+  .pane.cats { display: flex; align-items: center; overflow-x: auto; padding: 4px; gap: 4px; }
+  .pane.cats .row { flex: none; grid-template-columns: auto auto auto; gap: 6px; white-space: nowrap; border-radius: 6px; padding: 2px 8px; }
+  .ent { grid-template-columns: 1em 1.4em 8.5em minmax(0, 1fr); }
+  .ent .cmt { display: none; }
+  .ed-top .path { display: none; }
+}
+
+.file { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; display: flex; flex-direction: column; min-width: 0; }
+.file-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 13px/1.4 var(--font-code); }
+.badge { margin-left: auto; font: 500 12px/1.4 var(--font-body); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); white-space: nowrap; }
+.badge.warn { color: var(--warn); border-color: currentColor; }
+.badge.ok { color: var(--on); border-color: currentColor; }
+.file pre { margin: 0; padding: 10px 0; overflow: auto; font: 12.5px/1.6 var(--font-code); flex: 1; max-height: 340px; }
+.file pre span { display: block; padding: 0 14px; white-space: pre; }
+.file .c { color: var(--muted); }
+.file .k { color: var(--accent); }
+.file .new { background: var(--accent-soft); transition: background 1.2s; }
+
+/* sections */
+section { padding-block: 56px 8px; }
+h2 { margin: 0 0 8px; font: 700 clamp(22px, 3vw, 28px)/1.2 var(--font-display); letter-spacing: -.03em; text-wrap: balance; }
+.sub { margin: 0 0 20px; color: var(--muted); max-width: 62ch; }
+
+/* cli */
+.term { background: var(--term-bg); color: var(--term-fg); border-radius: 12px; font: 13.5px/1.55 var(--font-code); overflow: hidden; }
+.term-out { padding: 12px 14px 4px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.term-out .in { color: var(--term-fg); }
+.term-out .in::before { content: "$ "; color: var(--term-dim); }
+.term-out .dim { color: var(--term-dim); }
+.term-out .ok { color: var(--term-on); }
+.term-out .err { color: var(--term-err); }
+.term form { display: flex; gap: 8px; align-items: center; padding: 6px 14px 12px; }
+.term form span { color: var(--term-dim); }
+.term input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--term-fg); font: inherit; padding: 4px 0; }
+.term input:focus { outline: none; }
+.term form:focus-within { box-shadow: inset 0 -2px 0 var(--term-accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { font: 12.5px/1.3 var(--font-code); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; text-align: left; }
+.chip:hover { border-color: var(--accent); }
+
+/* features */
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 28px 32px; }
+.feature h3 { margin: 0 0 6px; font: 600 16px/1.35 var(--font-body); }
+.feature p { margin: 0; color: var(--muted); font-size: 15px; }
+.feature code { color: var(--fg); }
+.flag { display: inline-block; font: 600 11.5px/1 var(--font-code); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+
+/* install */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin-bottom: 0; overflow-x: auto; }
+.tab { font: 600 14px/1 var(--font-body); padding: 12px 14px; border: 0; background: none; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.codeblock { position: relative; background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 12px 12px; }
+.codeblock pre { margin: 0; padding: 16px; overflow-x: auto; font: 13px/1.65 var(--font-code); }
+.copy { position: absolute; top: 10px; right: 10px; font: 600 12.5px/1 var(--font-body); padding: 7px 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--bg); color: var(--fg); cursor: pointer; }
+.install-note { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+
+footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; gap: 12px 24px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+footer a { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { .ent.flash { animation: none; } .file .new { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav aria-label="Primary">
+    <a class="brand" href="#top"><img src="hosts-manager-icon.svg" alt="" width="28" height="28">hosts-manager</a>
+    <div class="links">
+      <a href="#install">Install</a>
+      <a href="https://github.com/brandonhon/hosts-manager/tree/main/docs">Docs</a>
+      <a href="https://github.com/brandonhon/hosts-manager/releases/latest">Releases</a>
+      <a href="https://github.com/brandonhon/hosts-manager">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="eyebrow"><b>/etc/hosts</b> · <b>C:\Windows\System32\drivers\etc\hosts</b></div>
+    <h1>Your hosts file,<br><span class="off">#</span> in order.</h1>
+    <p class="lede">Group entries into categories you switch on and off together, flip between profiles, and get a backup before every change. From the command line or a two-pane editor, on Linux, macOS and Windows.</p>
+    <div class="cta">
+      <a class="btn primary" id="install-btn" href="#install">Install v0.7.0</a>
+      <a class="btn" href="https://github.com/brandonhon/hosts-manager">View on GitHub</a>
+      <span class="meta">MIT · single binary · no daemon</span>
+    </div>
+  </header>
+
+  <p class="demo-hint"><strong>Try the editor.</strong> Click it, then use <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>space</kbd> to switch an entry on or off, <kbd>tab</kbd> for categories, <kbd>p</kbd> for profiles and <kbd>s</kbd> to save. Clicking a dot works too.</p>
+  <div class="demo">
+    <div class="ed" id="editor" tabindex="0" role="application" aria-label="Interactive hosts-manager editor demo"></div>
+    <div class="file" aria-label="The hosts file the editor writes">
+      <div class="file-head"><span>/etc/hosts</span><span class="badge" id="file-badge">saved</span></div>
+      <pre id="file" aria-live="polite"></pre>
+    </div>
+  </div>
+
+  <section id="cli" aria-labelledby="cli-h">
+    <h2 id="cli-h">Or script it</h2>
+    <p class="sub">Every editor action is also a command. This terminal changes the same sample file as the editor above.</p>
+    <div class="term">
+      <div class="term-out" id="term-out" aria-live="polite"></div>
+      <form id="term-form" autocomplete="off">
+        <span aria-hidden="true">$</span>
+        <input id="term-in" aria-label="Command" spellcheck="false" placeholder="sudo hosts-manager add 0.0.0.0 tracker.example.net -c blocked">
+      </form>
+    </div>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section aria-labelledby="why-h">
+    <h2 id="why-h">Plain file, careful edits</h2>
+    <p class="sub">hosts-manager keeps a normal hosts file. Categories are comment markers and switched-off entries are commented out, so the operating system and anyone reading it by hand see exactly what they expect.</p>
+    <div class="features">
+      <div class="feature"><span class="flag"># @category</span><h3>Categories</h3><p>Put your dev, staging and blocklist entries in their own groups and switch a whole group with <code>disable -c staging</code>.</p></div>
+      <div class="feature"><span class="flag">profile</span><h3>Profiles</h3><p>Name a set of categories and turn exactly those on with <code>profile development</code>.</p></div>
+      <div class="feature"><span class="flag">restore 1</span><h3>A backup before every change</h3><p>Each write is backed up first, and <code>restore 1</code> puts the previous file back.</p></div>
+      <div class="feature"><span class="flag">--dry-run</span><h3>Safe to try</h3><p>Changes need <code>sudo</code>. With <code>--dry-run</code> you can see what any command would do without it.</p></div>
+    </div>
+  </section>
+
+  <section id="install" aria-labelledby="install-h">
+    <h2 id="install-h">Install</h2>
+    <p class="sub">One binary per platform, checked against the release's <code>SHA256SUMS</code>.</p>
+    <div class="tabs" role="tablist" aria-label="Platform">
+      <button class="tab" role="tab" id="tab-linux" aria-selected="true" aria-controls="code">Linux</button>
+      <button class="tab" role="tab" id="tab-macos" aria-selected="false" aria-controls="code">macOS</button>
+      <button class="tab" role="tab" id="tab-windows" aria-selected="false" aria-controls="code">Windows</button>
+    </div>
+    <div class="codeblock" id="code" role="tabpanel">
+      <button class="copy" id="copy" type="button">Copy</button>
+      <pre id="code-pre"></pre>
+    </div>
+    <p class="install-note" id="install-note"></p>
+  </section>
+
+  <footer>
+    <span>hosts-manager · MIT licensed</span>
+    <a href="https://github.com/brandonhon/hosts-manager/blob/main/docs/install.md">Install guide</a>
+    <a href="https://github.com/brandonhon/hosts-manager/blob/main/docs/usage.md">Usage</a>
+    <a href="https://github.com/brandonhon/hosts-manager/blob/main/SECURITY.md">Security</a>
+    <a href="https://github.com/brandonhon/hosts-manager">Source</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  // ---- sample data: the same generic file the README screenshots use ----
+  const E = (ip, hosts, comment = "", on = true) => ({ ip, hosts, comment, on });
+  const state = {
+    cats: [
+      { name: "default", entries: [E("127.0.0.1", ["localhost"]), E("::1", ["localhost", "ip6-localhost"])] },
+      { name: "dev", entries: [E("127.0.0.1", ["app.test"], "local frontend"), E("10.0.0.5", ["api.dev.test", "auth.dev.test"], "dev cluster"),
+                               E("10.0.0.6", ["db.dev.test"]), E("10.0.0.7", ["queue.dev.test"], "retired", false)] },
+      { name: "staging", entries: [E("10.1.0.10", ["app.staging.test"], "", false), E("10.1.0.11", ["api.staging.test"], "", false)] },
+      { name: "blocked", entries: [E("0.0.0.0", ["ads.example.com"]), E("0.0.0.0", ["tracker.example.net"]), E("0.0.0.0", ["telemetry.example.org"])] },
+    ],
+    profiles: { development: ["default", "dev", "blocked"], staging: ["default", "staging", "blocked"], minimal: ["default"] },
+    cat: 1, cursor: 0, focus: "entries", unsaved: 0, msg: "", msgErr: false, flash: null, savedOnce: false,
+  };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const enabled = c => c.entries.filter(e => e.on).length;
+  const cur = () => state.cats[state.cat];
+
+  function activeProfile() {
+    const on = state.cats.filter(c => enabled(c) > 0).map(c => c.name).sort().join();
+    for (const [name, cats] of Object.entries(state.profiles))
+      if (cats.filter(n => state.cats.some(c => c.name === n)).sort().join() === on) return name;
+    return "custom";
+  }
+  function setProfile(name) {
+    const want = state.profiles[name];
+    state.cats.forEach(c => c.entries.forEach(e => { e.on = want.includes(c.name); }));
+  }
+  function toggleCategory(i) {
+    const c = state.cats[i], turnOn = enabled(c) === 0;
+    c.entries.forEach(e => { e.on = turnOn; });
+    return `${turnOn ? "Enabled" : "Disabled"} category ${c.name}`;
+  }
+  function changed(msg) { state.unsaved++; say(msg); }
+  function say(msg, err = false) { state.msg = msg; state.msgErr = err; }
+
+  // ---- the editor ----
+  const ed = document.getElementById("editor");
+  function renderEditor() {
+    const prof = activeProfile();
+    const cats = state.cats.map((c, i) => {
+      const n = enabled(c);
+      return `<div class="row cat${i === state.cat ? " sel" : ""}" data-cat="${i}">
+        <button class="dot${n ? " on" : ""}" data-catdot="${i}" tabindex="-1" aria-label="Switch category ${esc(c.name)} ${n ? "off" : "on"}">${n ? "●" : "○"}</button>
+        <span>${esc(c.name)}</span><span class="count">${n}/${c.entries.length}</span></div>`;
+    }).join("");
+    const ents = cur().entries.map((e, i) => {
+      const sel = state.focus === "entries" && i === state.cursor;
+      const fl = state.flash === `${state.cat}:${i}` ? " flash" : "";
+      return `<div class="row ent${e.on ? "" : " off"}${sel ? " sel" : ""}${fl}" data-ent="${i}">
+        <span class="ptr">${sel ? "▸" : ""}</span>
+        <button class="dot${e.on ? " on" : ""}" data-entdot="${i}" tabindex="-1" aria-label="Switch ${esc(e.hosts[0])} ${e.on ? "off" : "on"}">${e.on ? "●" : "○"}</button>
+        <span class="ip">${esc(e.ip)}</span><span class="host">${esc(e.hosts.join(" "))}</span><span class="cmt">${e.comment ? "# " + esc(e.comment) : ""}</span></div>`;
+    }).join("") || `<div class="row" style="color:var(--term-dim)">no entries</div>`;
+    const keys = state.msg
+      ? `<div class="ed-keys msg${state.msgErr ? " err" : ""}">${esc(state.msg)}</div>`
+      : `<div class="ed-keys"><b>space</b> toggle · <b>tab</b> pane · <b>t</b> category · <b>p</b> profile · <b>s</b> save · <b>?</b> help</div>`;
+    ed.innerHTML = `
+      <div class="ed-top"><span class="name">hosts-manager</span><span class="path">/etc/hosts</span>
+        <span class="right">profile: ${esc(prof)}${state.unsaved ? `<span class="unsaved">● ${state.unsaved} unsaved</span>` : ""}</span></div>
+      <div class="ed-body">
+        <div class="pane cats${state.focus === "cats" ? " active" : ""}" aria-label="Categories">${cats}</div>
+        <div class="pane${state.focus === "entries" ? " active" : ""}" aria-label="Entries"><div class="ttl">${esc(cur().name)}</div>${ents}</div>
+      </div>${keys}`;
+  }
+
+  // ---- the file it writes, laid out like hosts-manager's writer ----
+  const fileEl = document.getElementById("file"), badge = document.getElementById("file-badge");
+  let lastLines = null;
+  function fileLines() {
+    const out = ["# This file is currently managed by hosts-manager", "# See https://github.com/brandonhon/hosts-manager for usage", ""];
+    for (const c of state.cats) {
+      if (!c.entries.length) continue;
+      out.push(`# @category ${c.name}`, `# =============== ${c.name.toUpperCase()} ===============`);
+      for (const e of c.entries) out.push(`${e.on ? "" : "# "}${e.ip} ${e.hosts.join(" ")}${e.comment ? " # " + e.comment : ""}`);
+      out.push("");
+    }
+    return out;
+  }
+  function renderFile() {
+    const lines = fileLines();
+    const prev = lastLines ? new Set(lastLines) : null;
+    fileEl.innerHTML = lines.map(l => {
+      const cls = [l.startsWith("# @category") ? "k" : l.startsWith("#") ? "c" : "", prev && l && !prev.has(l) ? "new" : ""].filter(Boolean).join(" ");
+      return `<span${cls ? ` class="${cls}"` : ""}>${esc(l) || " "}</span>`;
+    }).join("");
+    lastLines = lines;
+    requestAnimationFrame(() => setTimeout(() => fileEl.querySelectorAll(".new").forEach(s => s.classList.remove("new")), 50));
+    badge.className = "badge " + (state.unsaved ? "warn" : state.savedOnce ? "ok" : "");
+    badge.textContent = state.unsaved ? `${state.unsaved} unsaved, press s` : state.savedOnce ? "saved · backup taken" : "saved";
+  }
+  function render() { renderEditor(); renderFile(); state.flash = null; }
+
+  function save() {
+    if (!state.unsaved) { say("Nothing to save"); return; }
+    const t = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+    state.unsaved = 0; state.savedOnce = true;
+    say(`Saved · backup hosts.backup.${t}.gz`);
+  }
+
+  ed.addEventListener("keydown", ev => {
+    const k = ev.key, ents = cur().entries.length;
+    let handled = true;
+    state.msg = "";
+    if (state.focus === "cats" && (k === "ArrowUp" || k === "k")) { state.cat = (state.cat + state.cats.length - 1) % state.cats.length; state.cursor = 0; }
+    else if (state.focus === "cats" && (k === "ArrowDown" || k === "j")) { state.cat = (state.cat + 1) % state.cats.length; state.cursor = 0; }
+    else if (state.focus === "cats" && (k === " " || k === "Enter")) { if (k === " ") changed(toggleCategory(state.cat)); else state.focus = "entries"; }
+    else if (k === "ArrowUp" || k === "k") state.cursor = Math.max(0, state.cursor - 1);
+    else if (k === "ArrowDown" || k === "j") state.cursor = Math.min(ents - 1, state.cursor + 1);
+    else if (k === " ") { const e = cur().entries[state.cursor]; if (e) { e.on = !e.on; state.flash = `${state.cat}:${state.cursor}`; changed(`${e.on ? "Enabled" : "Disabled"} ${e.hosts.join(" ")}`); } }
+    else if (k === "Tab") state.focus = state.focus === "cats" ? "entries" : "cats";
+    else if (k === "ArrowLeft" || k === "h") state.focus = "cats";
+    else if (k === "ArrowRight" || k === "l") state.focus = "entries";
+    else if (k === "t") changed(toggleCategory(state.cat));
+    else if (k === "p") { const names = Object.keys(state.profiles); const i = names.indexOf(activeProfile()); const next = names[(i + 1) % names.length]; setProfile(next); changed(`Activated profile ${next}`); }
+    else if (k === "s") save();
+    else if (k === "?") say("Keys: ↑↓/jk move · space toggle · tab or ←→ pane · t category · p next profile · s save");
+    else handled = false;
+    if (handled) { ev.preventDefault(); render(); }
+  });
+  ed.addEventListener("click", ev => {
+    const t = ev.target.closest("[data-catdot],[data-entdot],[data-cat],[data-ent]");
+    ed.focus({ preventScroll: true });
+    if (!t) return;
+    state.msg = "";
+    if (t.dataset.catdot !== undefined) { state.cat = +t.dataset.catdot; state.cursor = 0; changed(toggleCategory(state.cat)); }
+    else if (t.dataset.entdot !== undefined) { const i = +t.dataset.entdot, e = cur().entries[i]; e.on = !e.on; state.cursor = i; state.focus = "entries"; state.flash = `${state.cat}:${i}`; changed(`${e.on ? "Enabled" : "Disabled"} ${e.hosts.join(" ")}`); }
+    else if (t.dataset.cat !== undefined) { state.cat = +t.dataset.cat; state.cursor = 0; state.focus = "cats"; }
+    else if (t.dataset.ent !== undefined) { state.cursor = +t.dataset.ent; state.focus = "entries"; }
+    render();
+  });
+  ed.addEventListener("focus", () => ed.classList.add("focused"));
+  ed.addEventListener("blur", () => ed.classList.remove("focused"));
+
+  // ---- the command line, against the same state ----
+  const out = document.getElementById("term-out"), form = document.getElementById("term-form"), input = document.getElementById("term-in");
+  const print = (text, cls = "") => { const d = document.createElement("div"); if (cls) d.className = cls; d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; };
+  const hostRe = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  const ipRe = /^((\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]*:[0-9a-fA-F:.]*)$/;
+  const writes = new Set(["add", "rm", "delete", "enable", "disable"]);
+
+  function takeFlag(args, ...names) {
+    const i = args.findIndex(a => names.includes(a));
+    if (i < 0) return null;
+    const v = args[i + 1]; args.splice(i, 2); return v ?? "";
+  }
+  function formatEntry(e) { return `  ${e.on ? "✓" : "✗"} ${e.ip.padEnd(15)} ${e.hosts.join(" ")}${e.comment ? "  # " + e.comment : ""}`; }
+
+  function run(line) {
+    let words = (line.match(/"[^"]*"|\S+/g) || []).map(w => w.replace(/^"|"$/g, ""));
+    if (!words.length) return;
+    print(line, "in");
+    let sudo = false;
+    if (words[0] === "sudo") { sudo = true; words.shift(); }
+    if (words[0] === "hosts-manager") words.shift();
+    if (words[0] === "clear") { out.textContent = ""; return; }
+    const cmd = words.shift(), args = words;
+    if (!cmd || cmd === "help" || cmd === "-h" || cmd === "--help" || cmd === "-v") {
+      print("Commands: list [query] [-a] [-c cat] · add <ip> <host>... [-c cat] [-m note] · rm <host> · enable|disable <host> | -c <cat> · profile [name] · clear", "dim");
+      return;
+    }
+    if (cmd === "--version") { print("hosts-manager version v0.7.0"); return; }
+    if (writes.has(cmd) || (cmd === "profile" && args.length)) {
+      if (!sudo) { print(`Error: root privileges required to modify the hosts file. Run: sudo /usr/local/bin/hosts-manager ${[cmd, ...args].join(" ")}`, "err"); return; }
+    }
+    const fail = m => print("Error: " + m, "err");
+    switch (cmd) {
+      case "list": {
+        const all = args.includes("-a") || args.includes("--all"); const rest = args.filter(a => a !== "-a" && a !== "--all");
+        const only = takeFlag(rest, "-c", "--category"); const q = (rest[0] || "").toLowerCase();
+        if (only && !state.cats.some(c => c.name === only)) return fail(`category not found: ${only}`);
+        let shown = 0;
+        for (const c of state.cats) {
+          if (only && c.name !== only) continue;
+          const hits = c.entries.filter(e => !q || [e.ip, e.comment, ...e.hosts].some(f => f.toLowerCase().includes(q)));
+          const vis = hits.filter(e => e.on || all), hidden = hits.length - vis.length;
+          if (q && !hits.length) continue;
+          shown++;
+          print(`[${c.name}] ${c.entries.length} entries${hidden ? `, ${hidden} disabled hidden (-a to show)` : ""}`, "dim");
+          vis.forEach(e => print(formatEntry(e)));
+        }
+        if (!shown) print("No entries found");
+        return;
+      }
+      case "add": {
+        const cat = takeFlag(args, "-c", "--category") || "custom"; const note = takeFlag(args, "-m", "--comment") || "";
+        if (args.length < 2) return fail(`requires at least 2 arg(s), only received ${args.length}`);
+        const [ip, ...hosts] = args;
+        if (!ipRe.test(ip)) return fail(`failed to add entry: entry validation failed: invalid IP address: invalid IP address format: ${ip}`);
+        const bad = hosts.find(h => !hostRe.test(h) || h.length > 253);
+        if (bad) return fail(`failed to add entry: entry validation failed: invalid hostname: invalid hostname format: ${bad}`);
+        if (!/^[\w-]{1,50}$/.test(cat)) return fail(`invalid category name: ${cat}`);
+        let c = state.cats.find(x => x.name === cat);
+        if (!c) { c = { name: cat, entries: [] }; state.cats.push(c); }
+        c.entries.push(E(ip, hosts, note));
+        state.cat = state.cats.indexOf(c); state.cursor = c.entries.length - 1; state.flash = `${state.cat}:${state.cursor}`;
+        print(`Added ${ip} -> ${hosts.join(" ")} [${cat}]`, "ok"); break;
+      }
+      case "rm": case "delete": {
+        if (args.length !== 1) return fail(`accepts 1 arg(s), received ${args.length}`);
+        const h = args[0]; let done = false;
+        for (const c of state.cats) for (let i = c.entries.length - 1; i >= 0 && !done; i--) {
+          const e = c.entries[i], k = e.hosts.indexOf(h);
+          if (k >= 0) { if (e.hosts.length === 1) c.entries.splice(i, 1); else e.hosts.splice(k, 1); done = true; }
+        }
+        if (!done) return fail(`hostname not found: ${h}`);
+        state.cursor = 0; print(`Removed ${h}`, "ok"); break;
+      }
+      case "enable": case "disable": {
+        const on = cmd === "enable", cat = takeFlag(args, "-c", "--category");
+        if (cat !== null) {
+          if (args.length) return fail("give a hostname or --category, not both");
+          const c = state.cats.find(x => x.name === cat); if (!c) return fail(`category not found: ${cat}`);
+          c.entries.forEach(e => { e.on = on; }); state.cat = state.cats.indexOf(c);
+          print(`${on ? "Enabled" : "Disabled"} category ${cat}`, "ok"); break;
+        }
+        if (args.length !== 1) return fail("requires a hostname, or --category");
+        const e = state.cats.flatMap(c => c.entries).find(x => x.hosts.includes(args[0]));
+        if (!e) return fail(`hostname not found: ${args[0]}`);
+        e.on = on; print(`${on ? "Enabled" : "Disabled"} ${args[0]}`, "ok"); break;
+      }
+      case "profile": {
+        if (!args.length) { const a = activeProfile(); Object.entries(state.profiles).forEach(([n, cs]) => print(`${n === a ? "*" : " "} ${n.padEnd(12)} [${cs.join(" ")}]`)); return; }
+        if (!state.profiles[args[0]]) return fail(`profile not found: ${args[0]}`);
+        setProfile(args[0]); print(`Activated profile ${args[0]} [${state.profiles[args[0]].join(" ")}]`, "ok"); break;
+      }
+      default: return fail(`unknown command "${cmd}" for "hosts-manager"`);
+    }
+    // Commands write immediately, with a backup, so the editor's pending edits are saved too.
+    state.unsaved = 0; state.savedOnce = true; state.msg = "";
+    render();
+  }
+  form.addEventListener("submit", ev => { ev.preventDefault(); run(input.value.trim()); input.value = ""; });
+
+  const examples = ["hosts-manager list", "sudo hosts-manager add 0.0.0.0 tracker.example.org -c blocked",
+                    "sudo hosts-manager disable -c dev", "sudo hosts-manager profile staging", "hosts-manager list api -a",
+                    "hosts-manager add 10.0.0.9 web_cache.test"];
+  const chips = document.getElementById("chips");
+  examples.forEach(x => { const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = x; b.addEventListener("click", () => { input.value = x; input.focus(); }); chips.appendChild(b); });
+  print("Sample file loaded. Pick an example below or type a command.", "dim");
+
+  // ---- install tabs ----
+  let V = "v0.7.0"; // fallback; replaced by the latest release below
+  const snippetsFor = () => ({
+    linux: { code: `VERSION=${V}
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+base=https://github.com/brandonhon/hosts-manager/releases/download/$VERSION
+curl -fsSLO "$base/hosts-manager-$VERSION-linux-$ARCH.tar.gz" -O "$base/SHA256SUMS"
+grep "linux-$ARCH.tar.gz" SHA256SUMS | sha256sum -c
+tar -xzf "hosts-manager-$VERSION-linux-$ARCH.tar.gz" hosts-manager
+sudo install -m 0755 hosts-manager /usr/local/bin/`, note: "If sudo says “command not found”, run it as sudo /usr/local/bin/hosts-manager: some distributions leave /usr/local/bin out of sudo’s search path." },
+    macos: { code: `VERSION=${V}
+ARCH=$(uname -m | sed 's/x86_64/amd64/')
+base=https://github.com/brandonhon/hosts-manager/releases/download/$VERSION
+curl -fsSLO "$base/hosts-manager-$VERSION-darwin-$ARCH.tar.gz" -O "$base/SHA256SUMS"
+grep "darwin-$ARCH.tar.gz" SHA256SUMS | shasum -a 256 -c
+tar -xzf "hosts-manager-$VERSION-darwin-$ARCH.tar.gz" hosts-manager
+sudo install -d /usr/local/bin
+sudo install -m 0755 hosts-manager /usr/local/bin/`, note: "Downloaded in a browser instead of curl? Clear the quarantine flag first: xattr -d com.apple.quarantine hosts-manager" },
+    windows: { code: `$version = "${V}"
+$base = "https://github.com/brandonhon/hosts-manager/releases/download/$version"
+$zip = "hosts-manager-$version-windows-amd64.zip"
+Invoke-WebRequest "$base/$zip" -OutFile $zip
+Invoke-WebRequest "$base/SHA256SUMS" -OutFile SHA256SUMS
+$expected = ((Select-String -Path SHA256SUMS -Pattern $zip -SimpleMatch).Line -split '\\s+')[0]
+if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $expected) { throw "Checksum mismatch for $zip" }
+$dir = "$env:ProgramFiles\\hosts-manager"
+Expand-Archive $zip -DestinationPath $dir -Force
+$path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+if ($path -notlike "*$dir*") { [Environment]::SetEnvironmentVariable("Path", "$path;$dir", "Machine") }`, note: "Run in PowerShell opened with Run as administrator, then open a new Administrator terminal." },
+  });
+  const pre = document.getElementById("code-pre"), note = document.getElementById("install-note");
+  let currentTab = "linux";
+  function showTab(id) {
+    currentTab = id;
+    const sn = snippetsFor()[id];
+    document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.id === "tab-" + id)));
+    pre.textContent = sn.code; note.textContent = sn.note;
+    try { localStorage.setItem("hm-tab", id); } catch (_) {}
+  }
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showTab(t.id.slice(4))));
+  let start = /Mac/.test(navigator.platform) ? "macos" : /Win/.test(navigator.platform) ? "windows" : "linux";
+  try { start = localStorage.getItem("hm-tab") || start; } catch (_) {}
+  showTab(["linux", "macos", "windows"].includes(start) ? start : "linux");
+  fetch("https://api.github.com/repos/brandonhon/hosts-manager/releases/latest")
+    .then(r => (r.ok ? r.json() : null))
+    .then(rel => {
+      if (!rel || !/^v\d+\.\d+\.\d+$/.test(rel.tag_name) || rel.tag_name === V) return;
+      V = rel.tag_name;
+      showTab(currentTab);
+      document.getElementById("install-btn").textContent = "Install " + V;
+    })
+    .catch(() => {});
+  document.getElementById("copy").addEventListener("click", ev => {
+    const btn = ev.currentTarget;
+    navigator.clipboard.writeText(pre.textContent).then(() => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1500); })
+      .catch(() => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected, press Ctrl+C"; });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
