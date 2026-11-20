@@ -44,7 +44,8 @@ internal/platform/   OS paths, privilege checks, sudo ownership
   the required check.
 - Keep each commit to one change, with tests. A bug fix should come with a test
   that fails without it.
-- If a change alters behavior a user can see, update README.md in the same PR.
+- If a change alters behavior a user can see, update README.md or the page in
+  `docs/` that describes it, in the same PR.
 - Commit subjects become the release notes, so make them read well on their
   own. They take the form `<scope>: <description>`; `.gitmessage` has
   examples (`git config commit.template .gitmessage` to use it).
