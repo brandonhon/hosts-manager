@@ -3,7 +3,9 @@
 /dist/
 /hosts-manager
 hosts-manager.exe
-hosts-manager-*
+# Release archives and checksums downloaded into the repo root. Anchored with /
+# so files elsewhere that start with hosts-manager-, like the logo, are kept.
+/hosts-manager-*
 
 # Test binary
 hosts-manager-dev
