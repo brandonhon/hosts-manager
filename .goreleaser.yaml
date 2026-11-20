@@ -24,10 +24,11 @@ archives:
 checksum:
   name_template: SHA256SUMS
 
-# Notes are generated from the commits since the previous tag.
+# GitHub's own release notes: one line per pull request merged since the
+# previous tag, plus a link to the full comparison. Used when CHANGELOG.md has no
+# section for the tag (see .github/workflows/release.yml).
 changelog:
-  use: github
-  sort: asc
+  use: github-native
 
 release:
   prerelease: auto

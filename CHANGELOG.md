@@ -2,8 +2,8 @@
 
 **This file stops at 0.7.0.** The `[Unreleased]` section below is the curated summary of
 everything since 0.6.1; rename it to `## [0.7.0] - <date>` before tagging and the release
-workflow publishes it as the 0.7.0 release notes. Releases after that get notes generated
-from the commit history on the [releases page](https://github.com/brandonhon/hosts-manager/releases),
+workflow publishes it as the 0.7.0 release notes. Releases after that get notes GitHub
+generates from the merged pull requests, on the [releases page](https://github.com/brandonhon/hosts-manager/releases),
 unless a `## [X.Y.Z]` section is added here for them.
 
 ## [Unreleased]
@@ -100,7 +100,7 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
 ### Changed
 
 - Build infrastructure: releases are cut by pushing a `vX.Y.Z` tag. GoReleaser builds the
-  same five archives plus `SHA256SUMS`; release notes are generated from commits. This
+  same five archives plus `SHA256SUMS`; release notes are generated from merged pull requests. This
   replaces `semantic-release`, which chose versions from commit prefixes.
 - Build infrastructure: the Makefile is 12 targets (`make help`); `make check` runs what
   CI runs. CI runs tests with `-race` on Linux, macOS and Windows, plus golangci-lint v2,

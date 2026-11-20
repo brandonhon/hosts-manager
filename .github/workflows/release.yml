@@ -4,7 +4,7 @@ name: Release
 # A tag with a suffix (v1.2.3-rc.1) is published as a prerelease.
 # Builds, archives and checksums are defined in .goreleaser.yaml. If CHANGELOG.md
 # has a "## [X.Y.Z]" section for the tag, that section is the release notes;
-# otherwise notes are generated from the commits since the previous tag.
+# otherwise GitHub generates them from the pull requests merged since the previous tag.
 on:
   push:
     tags: ['v*']
@@ -40,7 +40,7 @@ jobs:
             echo "Release notes from CHANGELOG.md"
             echo "args=--release-notes=$notes" >> "$GITHUB_OUTPUT"
           else
-            echo "No CHANGELOG section for ${GITHUB_REF_NAME}; generating notes from commits"
+            echo "No CHANGELOG section for ${GITHUB_REF_NAME}; GitHub will generate notes from merged pull requests"
           fi
 
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
