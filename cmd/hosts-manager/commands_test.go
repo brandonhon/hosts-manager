@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/brandonhon/hosts-manager/internal/config"
 	"github.com/brandonhon/hosts-manager/internal/hosts"
+	"github.com/brandonhon/hosts-manager/internal/platform"
 )
 
 // TestAddEntry tests adding entries to hosts file
@@ -696,5 +698,38 @@ func TestRuntimeErrorsDoNotShowHelp(t *testing.T) {
 	reportError(&out, errors.New("hostname not found: x.test"))
 	if out.String() != "Error: hostname not found: x.test\n" {
 		t.Errorf("got %q", out.String())
+	}
+}
+
+// Opening the editor without privileges explains what the editor needs and
+// offers the no-privilege alternatives; other errors pass through unchanged.
+func TestEditorAccessError(t *testing.T) {
+	err := editorAccessError(fmt.Errorf("wrapped: %w", platform.ErrNotElevated), "hosts-manager")
+	for _, want := range []string{"interactive editor", "hosts-manager --dry-run", "hosts-manager --help"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("editor error missing %q:\n%s", want, err)
+		}
+	}
+
+	other := errors.New("running elevated but still cannot write")
+	if got := editorAccessError(other, "hosts-manager"); got != other {
+		t.Errorf("non-privilege error was rewritten: %v", got)
+	}
+}
+
+// Commands other than the editor keep the plain message: the editor's wording
+// ("the interactive editor needs...") must not leak into the shared write path.
+func TestCommandPrivilegeErrorIsNotTheEditorMessage(t *testing.T) {
+	if platform.New().IsElevated() {
+		t.Skip("running elevated; mutate would reach the real hosts file")
+	}
+	cfg = config.DefaultConfig()
+	dryRun = false
+	err := mutate("add", func(*hosts.HostsFile) (string, error) {
+		t.Fatal("change ran without privileges")
+		return "", nil
+	})
+	if !errors.Is(err, platform.ErrNotElevated) || strings.Contains(err.Error(), "interactive editor") {
+		t.Errorf("mutate error = %v", err)
 	}
 }

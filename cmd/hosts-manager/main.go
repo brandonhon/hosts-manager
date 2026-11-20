@@ -195,7 +195,7 @@ func runTUI() error {
 	// writing command. Checking here rather than on save means a user
 	// without them is told before making edits, not after.
 	if err := requireHostsWriteAccess(platform.New()); err != nil {
-		return err
+		return editorAccessError(err, os.Args[0])
 	}
 
 	hf, err := parseHosts()
@@ -206,6 +206,23 @@ func runTUI() error {
 	return tui.Run(hf, cfg, dryRun, func(hf *hosts.HostsFile) error {
 		return saveHosts("tui_save", "Saved from TUI", hf)
 	})
+}
+
+// editorAccessError explains a privilege failure when opening the editor.
+// The generic message says "modify the hosts file" and echoes the command
+// line back with sudo, which reads oddly for a bare `hosts-manager` or
+// `hosts-manager -v`: the person may only have wanted to look, or may have
+// expected -v to mean --version. invokedAs is the program as the person typed
+// it, for the suggestions that need no privileges.
+func editorAccessError(err error, invokedAs string) error {
+	if !errors.Is(err, platform.ErrNotElevated) {
+		return err
+	}
+	return fmt.Errorf(`the interactive editor needs elevated privileges, because it can save changes to the hosts file.
+  Open the editor:             %s
+  Look around without saving:  %s --dry-run
+  List all commands:           %s --help`,
+		platform.ElevatedCommand(nil), invokedAs, invokedAs)
 }
 
 func listCmd() *cobra.Command {
