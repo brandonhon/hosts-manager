@@ -1,8 +1,11 @@
 name: CI
 
-# No paths filter, on purpose: `Quality Gate` is a required check on main, and a
-# filtered-out workflow is reported as skipped, not passed, so the PR could
-# never merge.
+# Documentation-only changes skip the build, test, lint and security jobs.
+#
+# That is done by the `changes` job below rather than a `paths:` filter on the
+# workflow: `Quality Gate` is a required check on main, and a filtered-out
+# workflow never reports it, so a docs-only PR could never merge. Here the
+# workflow always runs and Quality Gate always reports.
 on:
   push:
     branches: [main]
@@ -17,8 +20,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides whether anything besides documentation changed. Unknown cases (a
+  # first push, a base commit that is not fetchable) count as code changes.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No usable base commit; treating as a code change."
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE" "$GITHUB_SHA")
+          echo "Changed files:"; echo "$files"
+          # Documentation: Markdown, docs/, LICENSE and issue templates.
+          if printf '%s\n' "$files" | grep -vqE '(\.md$|^docs/|^LICENSE$|^\.github/ISSUE_TEMPLATE/)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Documentation only; skipping build, test, lint and security."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     name: Test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +71,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,6 +92,8 @@ jobs:
 
   security:
     name: Security
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,10 +105,21 @@ jobs:
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - run: make sec
 
-  # The single required status check on main.
+  # The single required status check on main. It always runs, and passes when
+  # every job it depends on either passed or was skipped as docs-only.
   quality-gate:
     name: Quality Gate
+    if: always()
     runs-on: ubuntu-latest
-    needs: [test, lint, security]
+    needs: [changes, test, lint, security]
     steps:
-      - run: echo "All checks passed."
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "A required job ended with: $r"; exit 1 ;;
+            esac
+          done
