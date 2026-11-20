@@ -25,7 +25,11 @@ sec: ## Run gosec and govulncheck
 
 check: lint test sec ## Everything CI checks
 
-install: build ## Install to $(PREFIX)/bin (use sudo)
+# install deliberately does not depend on build: it runs under sudo, where go
+# is usually not on secure_path, and building as root would leave root-owned
+# files in build/. Build first as yourself, then install.
+install: ## Install build/hosts-manager to $(PREFIX)/bin (make build first, then sudo)
+	@test -f build/$(BINARY) || { echo "build/$(BINARY) not found: run 'make build' first, without sudo"; exit 1; }
 	install -m 0755 build/$(BINARY) $(PREFIX)/bin/$(BINARY)
 
 uninstall: ## Remove from $(PREFIX)/bin (use sudo)
