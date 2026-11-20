@@ -16,6 +16,7 @@ import (
 	"github.com/brandonhon/hosts-manager/internal/tui"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -97,6 +98,9 @@ hosts file, and the editor, need sudo (an Administrator terminal on Windows);
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !opensEditor(cmd) {
+				return cmd.Help()
+			}
 			return runTUI()
 		},
 	}
@@ -190,6 +194,20 @@ func saveHosts(op, summary string, hf *hosts.HostsFile) error {
 	return nil
 }
 
+// opensEditor reports whether a bare `hosts-manager` invocation should open
+// the editor: with no flags, or with only --dry-run. Any other flag on its own
+// - most often -v, which people expect to mean --version but is --verbose -
+// gets the full help instead of an editor that may not even be allowed to open.
+func opensEditor(cmd *cobra.Command) bool {
+	ok := true
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		if f.Name != "dry-run" {
+			ok = false
+		}
+	})
+	return ok
+}
+
 func runTUI() error {
 	// The TUI can save, so it needs the same privileges as every other
 	// writing command. Checking here rather than on save means a user
@@ -208,21 +226,18 @@ func runTUI() error {
 	})
 }
 
-// editorAccessError explains a privilege failure when opening the editor.
-// The generic message says "modify the hosts file" and echoes the command
-// line back with sudo, which reads oddly for a bare `hosts-manager` or
-// `hosts-manager -v`: the person may only have wanted to look, or may have
-// expected -v to mean --version. invokedAs is the program as the person typed
-// it, for the suggestions that need no privileges.
+// editorAccessError explains a privilege failure when opening the editor,
+// which the generic message words as modifying the hosts file. invokedAs is
+// the program as typed, for the --dry-run alternative, which needs no sudo.
 func editorAccessError(err error, invokedAs string) error {
 	if !errors.Is(err, platform.ErrNotElevated) {
 		return err
 	}
-	return fmt.Errorf(`the interactive editor needs elevated privileges, because it can save changes to the hosts file.
-  Open the editor:             %s
-  Look around without saving:  %s --dry-run
-  List all commands:           %s --help`,
-		platform.ElevatedCommand(nil), invokedAs, invokedAs)
+	hint := platform.ElevatedCommand(nil)
+	if !strings.HasPrefix(hint, "Run") {
+		hint = "Run: " + hint
+	}
+	return fmt.Errorf("the interactive editor needs elevated privileges to save changes.\n%s  (or %s --dry-run to look without saving)", hint, invokedAs)
 }
 
 func listCmd() *cobra.Command {

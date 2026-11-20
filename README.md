@@ -74,7 +74,8 @@ hosts-manager config
 
 Global flags: `--dry-run`, `-v/--verbose`, `--version`, `-h/--help`. Every
 command has `--help`, and a command given the wrong arguments or flags prints
-its help after the error.
+its help after the error. `-v` is `--verbose`, not the version: on its own it
+prints this help.
 
 ### Entries
 
