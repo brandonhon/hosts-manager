@@ -94,6 +94,12 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
     exist; category enable/disable did so for categories that do not exist.
   - Only `add` wrote to the audit log.
   - Commands without arguments, such as `backup`, silently ignored any they were given.
+  - "Run with sudo" hints name the binary by full path. `sudo hosts-manager` fails with
+    "command not found" wherever sudo's `secure_path` omits `/usr/local/bin`, as on RHEL
+    and Fedora.
+  - Opening the editor without privileges (for example `hosts-manager -v`, which is
+    `--verbose`) explains that the editor needs them and offers `--dry-run` and `--help`,
+    instead of a generic "modify hosts file" error.
   - An unrecognized `$EDITOR` made every command fail at startup.
   - `XDG_CONFIG_HOME` and `XDG_DATA_HOME` are honored on macOS.
 
