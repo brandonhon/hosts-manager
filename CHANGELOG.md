@@ -1,12 +1,11 @@
 # Changelog
 
-**This file stops at 0.7.0.** The `[Unreleased]` section below is the curated summary of
-everything since 0.6.1; rename it to `## [0.7.0] - <date>` before tagging and the release
-workflow publishes it as the 0.7.0 release notes. Releases after that get notes GitHub
-generates from the merged pull requests, on the [releases page](https://github.com/brandonhon/hosts-manager/releases),
+**This file stops at 0.7.0.** Its 0.7.0 section is the curated summary of everything since
+0.6.1 and is that release's notes. Later releases get notes GitHub generates from the merged
+pull requests, on the [releases page](https://github.com/brandonhon/hosts-manager/releases),
 unless a `## [X.Y.Z]` section is added here for them.
 
-## [Unreleased]
+## [0.7.0] - 2026-11-20
 
 0.7.0 reworks the command line, the interactive editor and the release process, and fixes a
 long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before upgrading.**
@@ -46,6 +45,8 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
   ignored.
 - **`import` and `export -o` use the path you give.** They were restricted to the tool's
   own directories, and `export -o ./file` silently wrote to the data directory instead.
+- **The repository's history was rewritten**, so every commit ID changed. If you have a
+  clone or fork from before 0.7.0, delete it and clone again; pulling into it will not work.
 - **Error messages are shown as-is.** IP addresses, paths and user names were masked
   (`add [ip-address] ...`).
 
@@ -94,6 +95,9 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
     exist; category enable/disable did so for categories that do not exist.
   - Only `add` wrote to the audit log.
   - Commands without arguments, such as `backup`, silently ignored any they were given.
+  - `sudo make install`, the from-source install, rebuilt the program as root, which fails
+    with `go: not found` wherever go is not on sudo's `secure_path`. It now only copies the
+    binary `make build` produced.
   - "Run with sudo" hints name the binary by full path. `sudo hosts-manager` fails with
     "command not found" wherever sudo's `secure_path` omits `/usr/local/bin`, as it does by
     default on RHEL, Fedora, Kali and current Debian testing/unstable.
@@ -113,7 +117,14 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
   CI runs. CI runs tests with `-race` on Linux, macOS and Windows, plus golangci-lint v2,
   gosec and govulncheck, all at pinned versions. gosec had never run before: it was
   installed from a module path that does not exist.
-- The program is 3,551 lines of Go, down from 6,128 in 0.6.1, after removing unused and
+- Build infrastructure: pull requests that change only documentation skip the build, test,
+  lint and security jobs. GitHub Actions are pinned to commit SHAs, and Dependabot opens
+  weekly pull requests for them and for Go modules.
+- Dependencies: `bubbles` 1.0.0, `cobra` 1.10.2 and `x/ansi` 0.11.6.
+- Repository security: CodeQL code scanning, Dependabot alerts and security updates, and
+  private vulnerability reporting (see `SECURITY.md`) are on, and release tags are
+  protected from being moved or deleted.
+- The program is 3,612 lines of Go, down from 6,128 in 0.6.1, after removing unused and
   redundant code: the error sanitizer, fuzzy search, unreachable validators and unused
   backup functions among it.
 
@@ -121,6 +132,7 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
 
 - The `Dockerfile`, which ran the tool as root in a container against a bind-mounted
   `/etc/hosts`.
+- Releases and tags for v0.6.0 and older, with their downloads. v0.6.1 remains.
 - `INSTALL.md` and `EXAMPLES.md`. The README is now a short overview, with full
   documentation in `docs/install.md`, `docs/usage.md` and `docs/configuration.md`.
 
@@ -130,4 +142,4 @@ long list of bugs found in an audit of 0.6.1. **Read "Breaking changes" before u
 
 * update module path to github.com/brandonhon/hosts-manager ([4394802](https://github.com/brandonhon/hosts-manager/commit/439480201dd2ac59d4b822192de34b16b016be24))
 
-[Unreleased]: https://github.com/brandonhon/hosts-manager/compare/v0.6.1...HEAD
+[0.7.0]: https://github.com/brandonhon/hosts-manager/compare/v0.6.1...v0.7.0
