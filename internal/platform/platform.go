@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,15 +70,40 @@ func (p *Platform) ElevateIfNeeded() error {
 	return nil
 }
 
+// ErrNotElevated is what ElevateIfNeeded's error matches (errors.Is) when the
+// process is not running as root or Administrator, so a caller can explain
+// the requirement in its own terms.
+var ErrNotElevated = errors.New("elevated privileges required")
+
+type notElevatedError struct{ msg string }
+
+func (e notElevatedError) Error() string        { return e.msg }
+func (e notElevatedError) Is(target error) bool { return target == ErrNotElevated }
+
 func (p *Platform) elevationRequiredError() error {
-	switch runtime.GOOS {
-	case "windows":
-		return fmt.Errorf("administrator privileges required to modify hosts file. Please run this command in an elevated Command Prompt or PowerShell")
-	case "darwin", "linux":
-		return fmt.Errorf("root privileges required to modify hosts file. Please run: sudo %s", strings.Join(os.Args, " "))
-	default:
-		return fmt.Errorf("elevated privileges required to modify hosts file at %s", p.HostsDir)
+	if runtime.GOOS == "windows" {
+		return notElevatedError{"administrator privileges required to modify the hosts file. " + ElevatedCommand(os.Args[1:])}
 	}
+	return notElevatedError{"root privileges required to modify the hosts file. Run: " + ElevatedCommand(os.Args[1:])}
+}
+
+// ElevatedCommand describes how to run this program with args, elevated.
+//
+// It names the binary by absolute path rather than as typed. sudo does not
+// search the caller's PATH but its own secure_path, which on many systems
+// (RHEL, Fedora, and any machine where it has been narrowed) omits
+// /usr/local/bin - so "sudo hosts-manager" fails with "command not found"
+// even though "hosts-manager" works.
+func ElevatedCommand(args []string) string {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = os.Args[0]
+	}
+	cmd := strings.Join(append([]string{exe}, args...), " ")
+	if runtime.GOOS == "windows" {
+		return "Run it from an Administrator terminal: " + cmd
+	}
+	return "sudo " + cmd
 }
 
 // invokingUser returns the home directory of the person who ran the command,

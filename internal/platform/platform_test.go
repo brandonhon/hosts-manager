@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"errors"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -382,5 +383,37 @@ func TestOwnershipHelpersWithoutSudo(t *testing.T) {
 	}
 	if err := GiveToInvokingUser(dir); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The suggested command names the binary by absolute path: sudo searches its
+// own secure_path, which often omits /usr/local/bin, so "sudo hosts-manager"
+// can fail with "command not found" where the absolute path works.
+func TestElevatedCommandUsesAbsolutePath(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip(err)
+	}
+	got := ElevatedCommand([]string{"add", "10.0.0.1", "a.test"})
+	if !strings.Contains(got, exe+" add 10.0.0.1 a.test") {
+		t.Errorf("ElevatedCommand = %q, want it to contain %q", got, exe+" add 10.0.0.1 a.test")
+	}
+	if runtime.GOOS != "windows" && !strings.HasPrefix(got, "sudo /") {
+		t.Errorf("ElevatedCommand = %q, want sudo and an absolute path", got)
+	}
+}
+
+func TestNotElevatedErrorIsRecognizable(t *testing.T) {
+	p := New()
+	if p.IsElevated() {
+		t.Skip("running elevated")
+	}
+	err := p.ElevateIfNeeded()
+	if !errors.Is(err, ErrNotElevated) {
+		t.Fatalf("ElevateIfNeeded() = %v, want an error matching ErrNotElevated", err)
+	}
+	exe, _ := os.Executable()
+	if !strings.Contains(err.Error(), exe) {
+		t.Errorf("error %q does not name the binary by absolute path %q", err, exe)
 	}
 }

@@ -28,6 +28,13 @@ Archives exist for `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`
 and `windows-amd64` (`.zip`). On Windows, extract `hosts-manager.exe` and add
 its folder to `PATH`.
 
+**If `sudo hosts-manager` says "command not found":** sudo does not search
+your `PATH` but its own `secure_path`, which on some systems (RHEL, Fedora, or
+anywhere it has been narrowed) leaves out `/usr/local/bin`. Run it by full
+path, `sudo /usr/local/bin/hosts-manager`, or add `/usr/local/bin` to
+`secure_path` with `sudo visudo`. The tool's own "run with sudo" hints always
+give the full path.
+
 From source (Go 1.24+):
 
 ```bash
