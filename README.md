@@ -42,6 +42,8 @@ making it. Every change is backed up first.
 
 ## Documentation
 
+- [Website](https://brandonhon.github.io/hosts-manager/): try the editor and the
+  commands in your browser
 - [Installing](docs/install.md): Linux, macOS, Windows, from source
 - [Using hosts-manager](docs/usage.md): every command and the interactive editor
 - [Configuration](docs/configuration.md): the config file, where data lives,
